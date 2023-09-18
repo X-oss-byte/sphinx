@@ -41,8 +41,7 @@ class ModuleAnalyzer:
         if loader and getattr(loader, 'get_source', None):
             # prefer Native loader, as it respects #coding directive
             try:
-                source = loader.get_source(modname)
-                if source:
+                if source := loader.get_source(modname):
                     # no exception and not None - it must be module source
                     return filename, source
             except ImportError:
@@ -59,7 +58,7 @@ class ModuleAnalyzer:
         filename = path.normpath(path.abspath(filename))
         if filename.lower().endswith(('.pyo', '.pyc')):
             filename = filename[:-1]
-            if not path.isfile(filename) and path.isfile(filename + 'w'):
+            if not path.isfile(filename) and path.isfile(f'{filename}w'):
                 filename += 'w'
         elif not filename.lower().endswith(('.py', '.pyw')):
             raise PycodeError('source is not a .py file: %r' % filename)
@@ -126,11 +125,7 @@ class ModuleAnalyzer:
 
             self.attr_docs = {}
             for (scope, comment) in parser.comments.items():
-                if comment:
-                    self.attr_docs[scope] = comment.splitlines() + ['']
-                else:
-                    self.attr_docs[scope] = ['']
-
+                self.attr_docs[scope] = comment.splitlines() + [''] if comment else ['']
             self.annotations = parser.annotations
             self.finals = parser.finals
             self.overloads = parser.overloads

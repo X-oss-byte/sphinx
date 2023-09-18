@@ -109,9 +109,14 @@ class CheckExternalLinksBuilder(DummyBuilder):
                 logger.warning(__('broken link: %s (%s)'), result.uri, result.message,
                                location=(result.docname, result.lineno))
             else:
-                logger.info(red('broken    ') + result.uri + red(' - ' + result.message))
-            self.write_entry('broken', result.docname, filename, result.lineno,
-                             result.uri + ': ' + result.message)
+                logger.info(red('broken    ') + result.uri + red(f' - {result.message}'))
+            self.write_entry(
+                'broken',
+                result.docname,
+                filename,
+                result.lineno,
+                f'{result.uri}: {result.message}',
+            )
             self.broken_hyperlinks += 1
         elif result.status == 'redirected':
             try:
@@ -126,15 +131,27 @@ class CheckExternalLinksBuilder(DummyBuilder):
                 text, color = ('with unknown code', purple)
             linkstat['text'] = text
             if self.config.linkcheck_allowed_redirects:
-                logger.warning('redirect  ' + result.uri + ' - ' + text + ' to ' +
-                               result.message, location=(result.docname, result.lineno))
+                logger.warning(
+                    f'redirect  {result.uri} - {text} to {result.message}',
+                    location=(result.docname, result.lineno),
+                )
             else:
-                logger.info(color('redirect  ') + result.uri +
-                            color(' - ' + text + ' to ' + result.message))
-            self.write_entry('redirected ' + text, result.docname, filename,
-                             result.lineno, result.uri + ' to ' + result.message)
+                logger.info(
+                    (
+                        color('redirect  ')
+                        + result.uri
+                        + color(f' - {text} to {result.message}')
+                    )
+                )
+            self.write_entry(
+                f'redirected {text}',
+                result.docname,
+                filename,
+                result.lineno,
+                f'{result.uri} to {result.message}',
+            )
         else:
-            raise ValueError('Unknown status %s.' % result.status)
+            raise ValueError(f'Unknown status {result.status}.')
 
     def write_linkstat(self, data: dict) -> None:
         self.json_outfile.write(json.dumps(data))
@@ -336,7 +353,7 @@ class HyperlinkAvailabilityCheckWorker(Thread):
                 )
                 return 'ignored', info, 0
 
-        if len(uri) == 0 or uri.startswith(('#', 'mailto:', 'tel:')):
+        if not uri or uri.startswith(('#', 'mailto:', 'tel:')):
             return 'unchecked', '', 0
         if not uri.startswith(('http:', 'https:')):
             if uri_re.match(uri):
@@ -526,10 +543,14 @@ def _get_request_headers(
                   uri,
                   '*')
 
-    for u in candidates:
-        if u in request_headers:
-            return {**DEFAULT_REQUEST_HEADERS, **request_headers[u]}
-    return {}
+    return next(
+        (
+            {**DEFAULT_REQUEST_HEADERS, **request_headers[u]}
+            for u in candidates
+            if u in request_headers
+        ),
+        {},
+    )
 
 
 def contains_anchor(response: Response, anchor: str) -> bool:

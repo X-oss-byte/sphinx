@@ -83,7 +83,7 @@ def global_toctree_for_doc(
             builder,
             toctree_node,
             prune=True,
-            maxdepth=int(maxdepth),
+            maxdepth=maxdepth,
             titles_only=titles_only,
             collapse=collapse,
             includehidden=includehidden,
@@ -339,8 +339,7 @@ def _toctree_url_entry(title: str, ref: str) -> nodes.bullet_list:
                                 *[nodes.Text(title)])
     para = addnodes.compact_paragraph('', '', reference)
     item = nodes.list_item('', para)
-    toc = nodes.bullet_list('', item)
-    return toc
+    return nodes.bullet_list('', item)
 
 
 def _toctree_self_entry(
@@ -356,9 +355,7 @@ def _toctree_self_entry(
                                 *[nodes.Text(title)])
     para = addnodes.compact_paragraph('', '', reference)
     item = nodes.list_item('', para)
-    # don't show subitems
-    toc = nodes.bullet_list('', item)
-    return toc
+    return nodes.bullet_list('', item)
 
 
 def _toctree_generated_entry(title: str, ref: str) -> nodes.bullet_list:
@@ -371,9 +368,7 @@ def _toctree_generated_entry(title: str, ref: str) -> nodes.bullet_list:
                                 refuri=docname, anchorname='')
     para = addnodes.compact_paragraph('', '', reference)
     item = nodes.list_item('', para)
-    # don't show subitems
-    toc = nodes.bullet_list('', item)
-    return toc
+    return nodes.bullet_list('', item)
 
 
 def _toctree_standard_entry(
@@ -387,7 +382,7 @@ def _toctree_standard_entry(
     tags: Tags,
 ) -> tuple[nodes.bullet_list, str]:
     refdoc = ref
-    if ref in toctree_ancestors and (not prune or maxdepth <= 0):
+    if refdoc in toctree_ancestors and (not prune or maxdepth <= 0):
         toc = toc.deepcopy()
     else:
         toc = _toctree_copy(toc, 2, maxdepth, collapse, tags)
@@ -395,7 +390,7 @@ def _toctree_standard_entry(
     if title and toc.children and len(toc.children) == 1:
         child = toc.children[0]
         for refnode in child.findall(nodes.reference):
-            if refnode['refuri'] == ref and not refnode['anchorname']:
+            if refnode['refuri'] == refdoc and not refnode['anchorname']:
                 refnode.children[:] = [nodes.Text(title)]
     return toc, refdoc
 

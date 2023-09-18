@@ -80,18 +80,24 @@ class VersionChange(SphinxDirective):
                 node[0].replace_self(nodes.paragraph('', '', content, translatable=False))
 
             para = node[0]
-            para.insert(0, nodes.inline('', '%s: ' % text, classes=classes))
+            para.insert(0, nodes.inline('', f'{text}: ', classes=classes))
         elif len(node) > 0:
             # the contents do not starts with a paragraph
-            para = nodes.paragraph('', '',
-                                   nodes.inline('', '%s: ' % text, classes=classes),
-                                   translatable=False)
+            para = nodes.paragraph(
+                '',
+                '',
+                nodes.inline('', f'{text}: ', classes=classes),
+                translatable=False,
+            )
             node.insert(0, para)
         else:
             # the contents are empty
-            para = nodes.paragraph('', '',
-                                   nodes.inline('', '%s.' % text, classes=classes),
-                                   translatable=False)
+            para = nodes.paragraph(
+                '',
+                '',
+                nodes.inline('', f'{text}.', classes=classes),
+                translatable=False,
+            )
             node.append(para)
 
         domain = cast(ChangeSetDomain, self.env.get_domain('changeset'))

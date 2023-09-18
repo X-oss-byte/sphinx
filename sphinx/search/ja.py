@@ -66,9 +66,8 @@ class MecabSplitter(BaseSplitter):
 
     def init_native(self, options: dict) -> None:
         param = '-Owakati'
-        dict = options.get('dict')
-        if dict:
-            param += ' -d %s' % dict
+        if dict := options.get('dict'):
+            param += f' -d {dict}'
         self.native = MeCab.Tagger(param)
 
     def init_ctypes(self, options: dict) -> None:
@@ -77,24 +76,18 @@ class MecabSplitter(BaseSplitter):
         lib = options.get('lib')
 
         if lib is None:
-            if sys.platform.startswith('win'):
-                libname = 'libmecab.dll'
-            else:
-                libname = 'mecab'
+            libname = 'libmecab.dll' if sys.platform.startswith('win') else 'mecab'
             libpath = ctypes.util.find_library(libname)
         elif os.path.basename(lib) == lib:
             libpath = ctypes.util.find_library(lib)
         else:
-            libpath = None
-            if os.path.exists(lib):
-                libpath = lib
+            libpath = lib if os.path.exists(lib) else None
         if libpath is None:
             raise RuntimeError('MeCab dynamic library is not available')
 
         param = 'mecab -Owakati'
-        dict = options.get('dict')
-        if dict:
-            param += ' -d %s' % dict
+        if dict := options.get('dict'):
+            param += f' -d {dict}'
 
         fs_enc = sys.getfilesystemencoding() or sys.getdefaultencoding()
 
@@ -401,16 +394,18 @@ class DefaultSplitter(BaseSplitter):
 
     # ctype_
     def ctype_(self, char: str) -> str:
-        for pattern, value in self.patterns_.items():
-            if pattern.match(char):
-                return value
-        return 'O'
+        return next(
+            (
+                value
+                for pattern, value in self.patterns_.items()
+                if pattern.match(char)
+            ),
+            'O',
+        )
 
     # ts_
     def ts_(self, dict: dict[str, int], key: str) -> int:
-        if key in dict:
-            return dict[key]
-        return 0
+        return dict.get(key, 0)
 
     # segment
     def split(self, input: str) -> list[str]:
@@ -423,12 +418,8 @@ class DefaultSplitter(BaseSplitter):
         for t in input:
             seg.append(t)
             ctype.append(self.ctype_(t))
-        seg.append('E1')
-        seg.append('E2')
-        seg.append('E3')
-        ctype.append('O')
-        ctype.append('O')
-        ctype.append('O')
+        seg.extend(('E1', 'E2', 'E3'))
+        ctype.extend(('O', 'O', 'O'))
         word = seg[3]
         p1 = 'U'
         p2 = 'U'

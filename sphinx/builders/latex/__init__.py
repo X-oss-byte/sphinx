@@ -138,7 +138,7 @@ class LaTeXBuilder(Builder):
     def get_target_uri(self, docname: str, typ: str | None = None) -> str:
         if docname not in self.docnames:
             raise NoUri(docname, typ)
-        return '%' + docname
+        return f'%{docname}'
 
     def get_relative_uri(self, from_: str, to: str, typ: str | None = None) -> str:
         # ignore source path
@@ -159,7 +159,7 @@ class LaTeXBuilder(Builder):
                                   'document %s'), docname)
                 continue
             self.document_data.append(entry)  # type: ignore[arg-type]
-            if docname.endswith(SEP + 'index'):
+            if docname.endswith(f'{SEP}index'):
                 docname = docname[:-5]
             self.titles.append((docname, entry[2]))
 
@@ -231,7 +231,7 @@ class LaTeXBuilder(Builder):
 
         # 'babel' key is public and user setting must be obeyed
         if self.context['babel']:
-            self.context['classoptions'] += ',' + self.babel.get_language()
+            self.context['classoptions'] += f',{self.babel.get_language()}'
             # this branch is not taken for xelatex/lualatex if default settings
             self.context['multilingual'] = self.context['babel']
             self.context['shorthandoff'] = SHORTHANDOFF
@@ -240,9 +240,8 @@ class LaTeXBuilder(Builder):
             if self.babel.uses_cyrillic() and 'fontpkg' not in self.config.latex_elements:
                 self.context['fontpkg'] = ''
         elif self.context['polyglossia']:
-            self.context['classoptions'] += ',' + self.babel.get_language()
-            options = self.babel.get_mainlanguage_options()
-            if options:
+            self.context['classoptions'] += f',{self.babel.get_language()}'
+            if options := self.babel.get_mainlanguage_options():
                 language = fr'\setmainlanguage[{options}]{{{self.babel.get_language()}}}'
             else:
                 language = r'\setmainlanguage{%s}' % self.babel.get_language()
@@ -319,13 +318,14 @@ class LaTeXBuilder(Builder):
 
     def get_contentsname(self, indexfile: str) -> str:
         tree = self.env.get_doctree(indexfile)
-        contentsname = ''
-        for toctree in tree.findall(addnodes.toctree):
-            if 'caption' in toctree:
-                contentsname = toctree['caption']
-                break
-
-        return contentsname
+        return next(
+            (
+                toctree['caption']
+                for toctree in tree.findall(addnodes.toctree)
+                if 'caption' in toctree
+            ),
+            '',
+        )
 
     def update_doc_context(self, title: str, author: str, theme: Theme) -> None:
         self.context['title'] = title
@@ -339,7 +339,7 @@ class LaTeXBuilder(Builder):
         self, indexfile: str, toctree_only: bool, appendices: list[str],
     ) -> nodes.document:
         self.docnames = set([indexfile] + appendices)
-        logger.info(darkgreen(indexfile) + " ", nonl=True)
+        logger.info(f"{darkgreen(indexfile)} ", nonl=True)
         tree = self.env.get_doctree(indexfile)
         tree['docname'] = indexfile
         if toctree_only:
@@ -375,8 +375,6 @@ class LaTeXBuilder(Builder):
                     newnodes.append(nodes.emphasis(title, title))
                     newnodes.append(nodes.Text(')'))
                     break
-            else:
-                pass
             pendingnode.replace_self(newnodes)
         return largetree
 
@@ -416,7 +414,7 @@ class LaTeXBuilder(Builder):
     @progress_message(__('copying additional files'))
     def copy_latex_additional_files(self) -> None:
         for filename in self.config.latex_additional_files:
-            logger.info(' ' + filename, nonl=True)
+            logger.info(f' {filename}', nonl=True)
             copy_asset_file(path.join(self.confdir, filename), self.outdir)
 
     def copy_image_files(self) -> None:
@@ -481,22 +479,19 @@ def default_latex_engine(config: Config) -> str:
         return 'uplatex'
     if config.language.startswith('zh'):
         return 'xelatex'
-    if config.language == 'el':
-        return 'xelatex'
-    return 'pdflatex'
+    return 'xelatex' if config.language == 'el' else 'pdflatex'
 
 
 def default_latex_docclass(config: Config) -> dict[str, str]:
     """ Better default latex_docclass settings for specific languages. """
-    if config.language == 'ja':
-        if config.latex_engine == 'uplatex':
-            return {'manual': 'ujbook',
-                    'howto': 'ujreport'}
-        else:
-            return {'manual': 'jsbook',
-                    'howto': 'jreport'}
-    else:
+    if config.language != 'ja':
         return {}
+    if config.latex_engine == 'uplatex':
+        return {'manual': 'ujbook',
+                'howto': 'ujreport'}
+    else:
+        return {'manual': 'jsbook',
+                'howto': 'jreport'}
 
 
 def default_latex_use_xindy(config: Config) -> bool:
@@ -508,11 +503,15 @@ def default_latex_documents(config: Config) -> list[tuple[str, str, str, str, st
     """ Better default latex_documents settings. """
     project = texescape.escape(config.project, config.latex_engine)
     author = texescape.escape(config.author, config.latex_engine)
-    return [(config.root_doc,
-             make_filename_from_project(config.project) + '.tex',
-             texescape.escape_abbr(project),
-             texescape.escape_abbr(author),
-             config.latex_theme)]
+    return [
+        (
+            config.root_doc,
+            f'{make_filename_from_project(config.project)}.tex',
+            texescape.escape_abbr(project),
+            texescape.escape_abbr(author),
+            config.latex_theme,
+        )
+    ]
 
 
 def setup(app: Sphinx) -> dict[str, Any]:

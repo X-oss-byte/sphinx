@@ -79,9 +79,10 @@ def is_supported_builder(builder: Builder) -> bool:
         return False
     if builder.name == 'singlehtml':
         return False
-    if builder.name.startswith('epub') and not builder.config.viewcode_enable_epub:
-        return False
-    return True
+    return bool(
+        not builder.name.startswith('epub')
+        or builder.config.viewcode_enable_epub
+    )
 
 
 def doctree_read(app: Sphinx, doctree: Node) -> None:
@@ -159,12 +160,11 @@ def env_merge_info(app: Sphinx, env: BuildEnvironment, docnames: Iterable[str],
     for modname, entry in other._viewcode_modules.items():
         if modname not in env._viewcode_modules:  # type: ignore[attr-defined]
             env._viewcode_modules[modname] = entry  # type: ignore[attr-defined]
-        else:
-            if env._viewcode_modules[modname]:  # type: ignore[attr-defined]
-                used = env._viewcode_modules[modname][2]  # type: ignore[attr-defined]
-                for fullname, docname in entry[2].items():
-                    if fullname not in used:
-                        used[fullname] = docname
+        elif env._viewcode_modules[modname]:  # type: ignore[attr-defined]
+            used = env._viewcode_modules[modname][2]  # type: ignore[attr-defined]
+            for fullname, docname in entry[2].items():
+                if fullname not in used:
+                    used[fullname] = docname
 
 
 def env_purge_doc(app: Sphinx, env: BuildEnvironment, docname: str) -> None:
@@ -207,15 +207,13 @@ class ViewcodeAnchorTransform(SphinxPostTransform):
 
 def get_module_filename(app: Sphinx, modname: str) -> str | None:
     """Get module filename for *modname*."""
-    source_info = app.emit_firstresult('viewcode-find-source', modname)
-    if source_info:
+    if source_info := app.emit_firstresult('viewcode-find-source', modname):
         return None
-    else:
-        try:
-            filename, source = ModuleAnalyzer.get_module_source(modname)
-            return filename
-        except Exception:
-            return None
+    try:
+        filename, source = ModuleAnalyzer.get_module_source(modname)
+        return filename
+    except Exception:
+        return None
 
 
 def should_generate_module_page(app: Sphinx, modname: str) -> bool:
@@ -263,18 +261,18 @@ def collect_pages(app: Sphinx) -> Generator[tuple[str, dict[str, Any], str], Non
         code, tags, used, refname = entry
         # construct a page name for the highlighted source
         pagename = posixpath.join(OUTPUT_DIRNAME, modname.replace('.', '/'))
-        # highlight the source using the builder's highlighter
-        if env.config.highlight_language in {'default', 'none'}:
-            lexer = env.config.highlight_language
-        else:
-            lexer = 'python'
         linenos = 'inline' * env.config.viewcode_line_numbers
+        lexer = (
+            env.config.highlight_language
+            if env.config.highlight_language in {'default', 'none'}
+            else 'python'
+        )
         highlighted = highlighter.highlight_block(code, lexer, linenos=linenos)
         # split the code into lines
         lines = highlighted.splitlines()
         # split off wrap markup from the first line of the actual code
         before, after = lines[0].split('<pre>')
-        lines[0:1] = [before + '<pre>', after]
+        lines[:1] = [f'{before}<pre>', after]
         # nothing to do for the last line; it always starts with </pre> anyway
         # now that we have code lines (starting at index 1), insert anchors for
         # the collected tags (HACK: this only works if the tag boundaries are
@@ -283,10 +281,10 @@ def collect_pages(app: Sphinx) -> Generator[tuple[str, dict[str, Any], str], Non
         link_text = _('[docs]')
         for name, docname in used.items():
             type, start, end = tags[name]
-            backlink = urito(pagename, docname) + '#' + refname + '.' + name
-            lines[start] = (f'<div class="viewcode-block" id="{name}">\n'
-                            f'<a class="viewcode-back" href="{backlink}">{link_text}</a>\n'
-                            + lines[start])
+            backlink = f'{urito(pagename, docname)}#{refname}.{name}'
+            lines[
+                start
+            ] = f'<div class="viewcode-block" id="{name}">\n<a class="viewcode-back" href="{backlink}">{link_text}</a>\n{lines[start]}'
             lines[min(end, max_index)] += '</div>\n'
 
         # try to find parents (for submodules)
@@ -319,14 +317,13 @@ def collect_pages(app: Sphinx) -> Generator[tuple[str, dict[str, Any], str], Non
     stack = ['']
     for modname in sorted(modnames):
         if modname.startswith(stack[-1]):
-            stack.append(modname + '.')
             html.append('<ul>')
         else:
             stack.pop()
             while not modname.startswith(stack[-1]):
                 stack.pop()
                 html.append('</ul>')
-            stack.append(modname + '.')
+        stack.append(f'{modname}.')
         relative_uri = urito(posixpath.join(OUTPUT_DIRNAME, 'index'),
                              posixpath.join(OUTPUT_DIRNAME, modname.replace('.', '/')))
         html.append(f'<li><a href="{relative_uri}">{modname}</a></li>\n')

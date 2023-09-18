@@ -52,7 +52,7 @@ class ExtensionError(SphinxError):
     @property
     def category(self) -> str:  # type: ignore[override]
         if self.modname:
-            return 'Extension error (%s)' % self.modname
+            return f'Extension error ({self.modname})'
         else:
             return 'Extension error'
 

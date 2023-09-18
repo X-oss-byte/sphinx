@@ -222,7 +222,7 @@ def linkify_issues_in_changelog(app, docname, source):
             changelog = f.read()
 
         def linkify(match):
-            url = 'https://github.com/sphinx-doc/sphinx/issues/' + match[1]
+            url = f'https://github.com/sphinx-doc/sphinx/issues/{match[1]}'
             return f'`{match[0]} <{url}>`_'
 
         linkified_changelog = re.sub(r'(?:PR)?#([0-9]+)\b', linkify, changelog)

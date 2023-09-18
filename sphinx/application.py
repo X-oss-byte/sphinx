@@ -174,16 +174,10 @@ class Sphinx:
             self._status = status
             self.quiet = False
 
-        if warning is None:
-            self._warning: IO = StringIO()
-        else:
-            self._warning = warning
+        self._warning = StringIO() if warning is None else warning
         self._warncount = 0
         self.keep_going = warningiserror and keep_going
-        if self.keep_going:
-            self.warningiserror = False
-        else:
-            self.warningiserror = warningiserror
+        self.warningiserror = False if self.keep_going else warningiserror
         self.pdb = pdb
         logging.setup(self, self._status, self._warning)
 
@@ -370,15 +364,17 @@ class Sphinx:
                   else __('finished with problems'))
         if self._warncount:
             if self.warningiserror:
-                if self._warncount == 1:
-                    msg = __('build %s, %s warning (with warnings treated as errors).')
-                else:
-                    msg = __('build %s, %s warnings (with warnings treated as errors).')
+                msg = (
+                    __('build %s, %s warning (with warnings treated as errors).')
+                    if self._warncount == 1
+                    else __(
+                        'build %s, %s warnings (with warnings treated as errors).'
+                    )
+                )
+            elif self._warncount == 1:
+                msg = __('build %s, %s warning.')
             else:
-                if self._warncount == 1:
-                    msg = __('build %s, %s warning.')
-                else:
-                    msg = __('build %s, %s warnings.')
+                msg = __('build %s, %s warnings.')
 
             logger.info(bold(msg % (status, self._warncount)))
         else:
@@ -1161,7 +1157,7 @@ class Sphinx:
         logger.debug('[app] adding autodocumenter: %r', cls)
         from sphinx.ext.autodoc.directive import AutodocDirective
         self.registry.add_documenter(cls.objtype, cls)
-        self.add_directive('auto' + cls.objtype, AutodocDirective, override=override)
+        self.add_directive(f'auto{cls.objtype}', AutodocDirective, override=override)
 
     def add_autodoc_attrgetter(self, typ: type, getter: Callable[[Any, str, Any], Any],
                                ) -> None:
@@ -1298,7 +1294,7 @@ class Sphinx:
                                       "to check and make it explicit")
             message_not_safe = __("the %s extension is not safe for parallel writing")
         else:
-            raise ValueError('parallel type %s is not supported' % typ)
+            raise ValueError(f'parallel type {typ} is not supported')
 
         for ext in self.extensions.values():
             allowed = getattr(ext, attrname, None)
@@ -1322,7 +1318,7 @@ class Sphinx:
         .. versionadded: 4.1
         """
         if policy not in ('always', 'per_page'):
-            raise ValueError('policy %s is not supported' % policy)
+            raise ValueError(f'policy {policy} is not supported')
         self.registry.html_assets_policy = policy
 
 

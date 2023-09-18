@@ -61,14 +61,14 @@ class ClickableMapDefinition:
     def parse(self, dot: str) -> None:
         matched = self.maptag_re.match(self.content[0])
         if not matched:
-            raise GraphvizError('Invalid clickable map file found: %s' % self.filename)
+            raise GraphvizError(f'Invalid clickable map file found: {self.filename}')
 
         self.id = matched.group(1)
         if self.id == '%3':
             # graphviz generates wrong ID if graph name not specified
             # https://gitlab.com/graphviz/graphviz/issues/1327
             hashed = sha1(dot.encode(), usedforsecurity=False).hexdigest()
-            self.id = 'grapviz%s' % hashed[-10:]
+            self.id = f'grapviz{hashed[-10:]}'
             self.content[0] = self.content[0].replace('%3', self.id)
 
         for line in self.content:
@@ -282,7 +282,7 @@ def render_dot(self: HTML5Translator | LaTeXTranslator | TexinfoTranslator,
 
     dot_args = [graphviz_dot]
     dot_args.extend(self.builder.config.graphviz_dot_args)
-    dot_args.extend(['-T' + format, '-o' + outfn])
+    dot_args.extend([f'-T{format}', f'-o{outfn}'])
 
     docname = options.get('docname', 'index')
     if filename:
@@ -291,7 +291,7 @@ def render_dot(self: HTML5Translator | LaTeXTranslator | TexinfoTranslator,
         cwd = path.dirname(path.join(self.builder.srcdir, docname))
 
     if format == 'png':
-        dot_args.extend(['-Tcmapx', '-o%s.map' % outfn])
+        dot_args.extend(['-Tcmapx', f'-o{outfn}.map'])
 
     try:
         ret = subprocess.run(dot_args, input=code.encode(), capture_output=True,
@@ -339,30 +339,31 @@ def render_dot_html(self: HTML5Translator, node: graphviz, code: str, options: d
         if alt is None:
             alt = node.get('alt', self.encode(code).strip())
         if 'align' in node:
-            self.body.append('<div align="%s" class="align-%s">' %
-                             (node['align'], node['align']))
+            self.body.append(
+                f"""<div align="{node['align']}" class="align-{node['align']}">"""
+            )
         if format == 'svg':
             self.body.append('<div class="graphviz">')
             self.body.append('<object data="%s" type="image/svg+xml" class="%s">\n' %
                              (fname, imgcls))
-            self.body.append('<p class="warning">%s</p>' % alt)
+            self.body.append(f'<p class="warning">{alt}</p>')
             self.body.append('</object></div>\n')
         else:
             assert outfn is not None
-            with open(outfn + '.map', encoding='utf-8') as mapfile:
-                imgmap = ClickableMapDefinition(outfn + '.map', mapfile.read(), dot=code)
+            with open(f'{outfn}.map', encoding='utf-8') as mapfile:
+                imgmap = ClickableMapDefinition(f'{outfn}.map', mapfile.read(), dot=code)
                 if imgmap.clickable:
                     # has a map
                     self.body.append('<div class="graphviz">')
-                    self.body.append('<img src="%s" alt="%s" usemap="#%s" class="%s" />' %
-                                     (fname, alt, imgmap.id, imgcls))
+                    self.body.append(
+                        f'<img src="{fname}" alt="{alt}" usemap="#{imgmap.id}" class="{imgcls}" />'
+                    )
                     self.body.append('</div>\n')
                     self.body.append(imgmap.generate_clickable_map())
                 else:
                     # nothing in image map
                     self.body.append('<div class="graphviz">')
-                    self.body.append('<img src="%s" alt="%s" class="%s" />' %
-                                     (fname, alt, imgcls))
+                    self.body.append(f'<img src="{fname}" alt="{alt}" class="{imgcls}" />')
                     self.body.append('</div>\n')
         if 'align' in node:
             self.body.append('</div>\n')

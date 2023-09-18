@@ -26,10 +26,7 @@ def filter_whitespace(code: str) -> str:
 
 def get_assign_targets(node: ast.AST) -> list[ast.expr]:
     """Get list of targets from Assign and AnnAssign node."""
-    if isinstance(node, ast.Assign):
-        return node.targets
-    else:
-        return [node.target]  # type: ignore[attr-defined]
+    return node.targets if isinstance(node, ast.Assign) else [node.target]
 
 
 def get_lvar_names(node: ast.AST, self: ast.arg | None = None) -> list[str]:
@@ -65,7 +62,7 @@ def get_lvar_names(node: ast.AST, self: ast.arg | None = None) -> list[str]:
             self and node.value.id == self_id  # type: ignore[attr-defined]
         ):
             # instance variable
-            return ["%s" % get_lvar_names(node.attr, self)[0]]  # type: ignore[attr-defined]
+            return [f"{get_lvar_names(node.attr, self)[0]}"]
         else:
             raise TypeError('The assignment %r is not instance variable' % node)
     elif node_name == 'str':
@@ -84,10 +81,7 @@ def dedent_docstring(s: str) -> str:
 
     dummy.__doc__ = s
     docstring = inspect.getdoc(dummy)
-    if docstring:
-        return docstring.lstrip("\r\n").rstrip("\r\n")
-    else:
-        return ""
+    return docstring.lstrip("\r\n").rstrip("\r\n") if docstring else ""
 
 
 class Token:
@@ -236,83 +230,72 @@ class VariableCommentPicker(ast.NodeVisitor):
 
     def get_qualname_for(self, name: str) -> list[str] | None:
         """Get qualified name for given object as a list of string(s)."""
-        if self.current_function:
-            if self.current_classes and self.context[-1] == "__init__":
-                # store variable comments inside __init__ method of classes
-                return self.context[:-1] + [name]
-            else:
-                return None
-        else:
+        if not self.current_function:
             return self.context + [name]
+        if self.current_classes and self.context[-1] == "__init__":
+            # store variable comments inside __init__ method of classes
+            return self.context[:-1] + [name]
+        else:
+            return None
 
     def add_entry(self, name: str) -> None:
-        qualname = self.get_qualname_for(name)
-        if qualname:
+        if qualname := self.get_qualname_for(name):
             self.deforders[".".join(qualname)] = next(self.counter)
 
     def add_final_entry(self, name: str) -> None:
-        qualname = self.get_qualname_for(name)
-        if qualname:
+        if qualname := self.get_qualname_for(name):
             self.finals.append(".".join(qualname))
 
     def add_overload_entry(self, func: ast.FunctionDef) -> None:
         # avoid circular import problem
         from sphinx.util.inspect import signature_from_ast
-        qualname = self.get_qualname_for(func.name)
-        if qualname:
+        if qualname := self.get_qualname_for(func.name):
             overloads = self.overloads.setdefault(".".join(qualname), [])
             overloads.append(signature_from_ast(func))
 
     def add_variable_comment(self, name: str, comment: str) -> None:
-        qualname = self.get_qualname_for(name)
-        if qualname:
+        if qualname := self.get_qualname_for(name):
             basename = ".".join(qualname[:-1])
             self.comments[(basename, name)] = comment
 
     def add_variable_annotation(self, name: str, annotation: ast.AST) -> None:
-        qualname = self.get_qualname_for(name)
-        if qualname:
+        if qualname := self.get_qualname_for(name):
             basename = ".".join(qualname[:-1])
             self.annotations[(basename, name)] = ast_unparse(annotation)
 
     def is_final(self, decorators: list[ast.expr]) -> bool:
         final = []
         if self.typing:
-            final.append('%s.final' % self.typing)
+            final.append(f'{self.typing}.final')
         if self.typing_final:
             final.append(self.typing_final)
 
         for decorator in decorators:
-            try:
+            with contextlib.suppress(NotImplementedError):
                 if ast_unparse(decorator) in final:
                     return True
-            except NotImplementedError:
-                pass
-
         return False
 
     def is_overload(self, decorators: list[ast.expr]) -> bool:
         overload = []
         if self.typing:
-            overload.append('%s.overload' % self.typing)
+            overload.append(f'{self.typing}.overload')
         if self.typing_overload:
             overload.append(self.typing_overload)
 
         for decorator in decorators:
-            try:
+            with contextlib.suppress(NotImplementedError):
                 if ast_unparse(decorator) in overload:
                     return True
-            except NotImplementedError:
-                pass
-
         return False
 
     def get_self(self) -> ast.arg | None:
         """Returns the name of the first argument if in a function."""
-        if self.current_function and self.current_function.args.args:
-            return self.current_function.args.args[0]
-        if self.current_function and self.current_function.args.posonlyargs:
-            return self.current_function.args.posonlyargs[0]
+        if self.current_function:
+            if self.current_function.args.args:
+                return self.current_function.args.args[0]
+            if self.current_function.args.posonlyargs:
+                return self.current_function.args.posonlyargs[0]
         return None
 
     def get_line(self, lineno: int) -> str:
@@ -341,17 +324,18 @@ class VariableCommentPicker(ast.NodeVisitor):
         for name in node.names:
             self.add_entry(name.asname or name.name)
 
-            if node.module == 'typing' and name.name == 'final':
-                self.typing_final = name.asname or name.name
-            elif node.module == 'typing' and name.name == 'overload':
-                self.typing_overload = name.asname or name.name
+            if node.module == 'typing':
+                if name.name == 'final':
+                    self.typing_final = name.asname or name.name
+                elif name.name == 'overload':
+                    self.typing_overload = name.asname or name.name
 
     def visit_Assign(self, node: ast.Assign) -> None:
         """Handles Assign node and pick up a variable comment."""
         try:
             targets = get_assign_targets(node)
             varnames: list[str] = sum(
-                [get_lvar_names(t, self=self.get_self()) for t in targets], [],
+                (get_lvar_names(t, self=self.get_self()) for t in targets), []
             )
             current_line = self.get_line(node.lineno)
         except TypeError:
@@ -403,21 +387,23 @@ class VariableCommentPicker(ast.NodeVisitor):
 
     def visit_Expr(self, node: ast.Expr) -> None:
         """Handles Expr node and pick up a comment if string."""
-        if (isinstance(self.previous, (ast.Assign, ast.AnnAssign)) and
-                isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
-            try:
-                targets = get_assign_targets(self.previous)
-                varnames = get_lvar_names(targets[0], self.get_self())
-                for varname in varnames:
-                    if isinstance(node.value.value, str):
-                        docstring = node.value.value
-                    else:
-                        docstring = node.value.value.decode(self.encoding or 'utf-8')
-
-                    self.add_variable_comment(varname, dedent_docstring(docstring))
-                    self.add_entry(varname)
-            except TypeError:
-                pass  # this assignment is not new definition!
+        if (
+            not isinstance(self.previous, (ast.Assign, ast.AnnAssign))
+            or not isinstance(node.value, ast.Constant)
+            or not isinstance(node.value.value, str)
+        ):
+            return
+        with contextlib.suppress(TypeError):
+            targets = get_assign_targets(self.previous)
+            varnames = get_lvar_names(targets[0], self.get_self())
+            for varname in varnames:
+                docstring = (
+                    node.value.value
+                    if isinstance(node.value.value, str)
+                    else node.value.value.decode(self.encoding or 'utf-8')
+                )
+                self.add_variable_comment(varname, dedent_docstring(docstring))
+                self.add_entry(varname)
 
     def visit_Try(self, node: ast.Try) -> None:
         """Handles Try node and processes body and else-clause.
@@ -444,18 +430,19 @@ class VariableCommentPicker(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Handles FunctionDef node and set context."""
-        if self.current_function is None:
-            self.add_entry(node.name)  # should be called before setting self.current_function
-            if self.is_final(node.decorator_list):
-                self.add_final_entry(node.name)
-            if self.is_overload(node.decorator_list):
-                self.add_overload_entry(node)
-            self.context.append(node.name)
-            self.current_function = node
-            for child in node.body:
-                self.visit(child)
-            self.context.pop()
-            self.current_function = None
+        if self.current_function is not None:
+            return
+        self.add_entry(node.name)  # should be called before setting self.current_function
+        if self.is_final(node.decorator_list):
+            self.add_final_entry(node.name)
+        if self.is_overload(node.decorator_list):
+            self.add_overload_entry(node)
+        self.context.append(node.name)
+        self.current_function = node
+        for child in node.body:
+            self.visit(child)
+        self.context.pop()
+        self.current_function = None
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """Handles AsyncFunctionDef node and set context."""
@@ -476,10 +463,7 @@ class DefinitionFinder(TokenProcessor):
 
     def add_definition(self, name: str, entry: tuple[str, int, int]) -> None:
         """Add a location of definition."""
-        if self.indents and self.indents[-1][0] == 'def' and entry[0] == 'def':
-            # ignore definition of inner function
-            pass
-        else:
+        if not self.indents or self.indents[-1][0] != 'def' or entry[0] != 'def':
             self.definitions[name] = entry
 
     def parse(self) -> None:

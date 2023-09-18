@@ -68,16 +68,15 @@ class _UnparseVisitor(ast.NodeVisitor):
         name = self.visit(arg)
         if default:
             if arg.annotation:
-                name += " = %s" % self.visit(default)
+                name += f" = {self.visit(default)}"
             else:
-                name += "=%s" % self.visit(default)
+                name += f"={self.visit(default)}"
         return name
 
     def visit_arguments(self, node: ast.arguments) -> str:
         defaults: list[ast.expr | None] = list(node.defaults)
-        positionals = len(node.args)
         posonlyargs = len(node.posonlyargs)
-        positionals += posonlyargs
+        positionals = len(node.args) + posonlyargs
         for _ in range(len(defaults), positionals):
             defaults.insert(0, None)
 
@@ -85,26 +84,28 @@ class _UnparseVisitor(ast.NodeVisitor):
         for _ in range(len(kw_defaults), len(node.kwonlyargs)):
             kw_defaults.insert(0, None)
 
-        args: list[str] = []
-        for i, arg in enumerate(node.posonlyargs):
-            args.append(self._visit_arg_with_default(arg, defaults[i]))
-
+        args: list[str] = [
+            self._visit_arg_with_default(arg, defaults[i])
+            for i, arg in enumerate(node.posonlyargs)
+        ]
         if node.posonlyargs:
             args.append('/')
 
-        for i, arg in enumerate(node.args):
-            args.append(self._visit_arg_with_default(arg, defaults[i + posonlyargs]))
-
+        args.extend(
+            self._visit_arg_with_default(arg, defaults[i + posonlyargs])
+            for i, arg in enumerate(node.args)
+        )
         if node.vararg:
-            args.append("*" + self.visit(node.vararg))
+            args.append(f"*{self.visit(node.vararg)}")
 
         if node.kwonlyargs and not node.vararg:
             args.append('*')
-        for i, arg in enumerate(node.kwonlyargs):
-            args.append(self._visit_arg_with_default(arg, kw_defaults[i]))
-
+        args.extend(
+            self._visit_arg_with_default(arg, kw_defaults[i])
+            for i, arg in enumerate(node.kwonlyargs)
+        )
         if node.kwarg:
-            args.append("**" + self.visit(node.kwarg))
+            args.append(f"**{self.visit(node.kwarg)}")
 
         return ", ".join(args)
 
@@ -118,7 +119,7 @@ class _UnparseVisitor(ast.NodeVisitor):
         return " ".join(self.visit(e) for e in [node.left, node.op, node.right])
 
     def visit_BoolOp(self, node: ast.BoolOp) -> str:
-        op = " %s " % self.visit(node.op)
+        op = f" {self.visit(node.op)} "
         return op.join(self.visit(e) for e in node.values)
 
     def visit_Call(self, node: ast.Call) -> str:
@@ -140,11 +141,11 @@ class _UnparseVisitor(ast.NodeVisitor):
     def visit_Dict(self, node: ast.Dict) -> str:
         keys = (self.visit(k) for k in node.keys if k is not None)
         values = (self.visit(v) for v in node.values)
-        items = (k + ": " + v for k, v in zip(keys, values))
+        items = (f"{k}: {v}" for k, v in zip(keys, values))
         return "{" + ", ".join(items) + "}"
 
     def visit_Lambda(self, node: ast.Lambda) -> str:
-        return "lambda %s: ..." % self.visit(node.args)
+        return f"lambda {self.visit(node.args)}: ..."
 
     def visit_List(self, node: ast.List) -> str:
         return "[" + ", ".join(self.visit(e) for e in node.elts) + "]"
@@ -180,9 +181,9 @@ class _UnparseVisitor(ast.NodeVisitor):
         if len(node.elts) == 0:
             return "()"
         elif len(node.elts) == 1:
-            return "(%s,)" % self.visit(node.elts[0])
+            return f"({self.visit(node.elts[0])},)"
         else:
             return "(" + ", ".join(self.visit(e) for e in node.elts) + ")"
 
     def generic_visit(self, node):
-        raise NotImplementedError('Unable to parse %s object' % type(node).__name__)
+        raise NotImplementedError(f'Unable to parse {type(node).__name__} object')

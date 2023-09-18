@@ -99,25 +99,21 @@ def get_type_comment(obj: Any, bound_method: bool = False) -> Signature | None:
             module = ast.parse(source, type_comments=True)
             subject = cast(ast.FunctionDef, module.body[0])
 
-        type_comment = getattr(subject, "type_comment", None)
-        if type_comment:
+        if type_comment := getattr(subject, "type_comment", None):
             function = ast.parse(type_comment, mode='func_type', type_comments=True)
             return signature_from_ast(
                 subject, bound_method, function,  # type: ignore[arg-type]
             )
         else:
             return None
-    except (OSError, TypeError):  # failed to load source code
-        return None
-    except SyntaxError:  # failed to parse type_comments
+    except (OSError, TypeError, SyntaxError):  # failed to load source code
         return None
 
 
 def update_annotations_using_type_comments(app: Sphinx, obj: Any, bound_method: bool) -> None:
     """Update annotations info of *obj* using type_comments."""
     try:
-        type_sig = get_type_comment(obj, bound_method)
-        if type_sig:
+        if type_sig := get_type_comment(obj, bound_method):
             sig = inspect.signature(obj, bound_method)
             for param in sig.parameters.values():
                 if param.name not in obj.__annotations__:

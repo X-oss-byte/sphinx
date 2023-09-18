@@ -99,7 +99,7 @@ class ShowUrlsTransform(SphinxPostTransform):
 
                         self.expanded = True
                     else:  # all other true values (b/w compat)
-                        textnode = nodes.Text(" (%s)" % uri)
+                        textnode = nodes.Text(f" ({uri})")
                         node.parent.insert(index + 1, textnode)
 
     def get_docname_for_node(self, node: Node) -> str:
@@ -580,8 +580,7 @@ class DocumentTargetTransform(SphinxPostTransform):
 
     def run(self, **kwargs: Any) -> None:
         for node in self.document.findall(addnodes.start_of_file):
-            section = node.next_node(nodes.section)
-            if section:
+            if section := node.next_node(nodes.section):
                 section['ids'].append(':doc')  # special label for :doc:
 
 

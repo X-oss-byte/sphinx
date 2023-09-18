@@ -103,12 +103,7 @@ def try_import(objname: str) -> Any:
 
 def import_classes(name: str, currmodule: str) -> Any:
     """Import a class using its fully-qualified *name*."""
-    target = None
-
-    # import class or module using currmodule
-    if currmodule:
-        target = try_import(currmodule + '.' + name)
-
+    target = try_import(f'{currmodule}.{name}') if currmodule else None
     # import class or module without currmodule
     if target is None:
         target = try_import(name)
@@ -122,12 +117,11 @@ def import_classes(name: str, currmodule: str) -> Any:
         # If imported object is a class, just return it
         return [target]
     elif inspect.ismodule(target):
-        # If imported object is a module, return classes defined on it
-        classes = []
-        for cls in target.__dict__.values():
-            if inspect.isclass(cls) and cls.__module__ == target.__name__:
-                classes.append(cls)
-        return classes
+        return [
+            cls
+            for cls in target.__dict__.values()
+            if inspect.isclass(cls) and cls.__module__ == target.__name__
+        ]
     raise InheritanceException('%r specified for inheritance diagram is '
                                'not a class or module' % name)
 
@@ -243,9 +237,7 @@ class InheritanceGraph:
         else:
             name_parts = fullname.split('.')
             result = '.'.join(name_parts[-parts:])
-        if aliases is not None and result in aliases:
-            return aliases[result]
-        return result
+        return aliases[result] if aliases is not None and result in aliases else result
 
     def get_all_class_names(self) -> list[str]:
         """Get all of the class names involved in the graph."""
@@ -309,15 +301,12 @@ class InheritanceGraph:
             n_attrs.update(env.config.inheritance_node_attrs)
             e_attrs.update(env.config.inheritance_edge_attrs)
 
-        res: list[str] = []
-        res.append('digraph %s {\n' % name)
-        res.append(self._format_graph_attrs(g_attrs))
-
+        res: list[str] = ['digraph %s {\n' % name, self._format_graph_attrs(g_attrs)]
         for name, fullname, bases, tooltip in sorted(self.class_info):
             # Write the node
             this_node_attrs = n_attrs.copy()
             if fullname in urls:
-                this_node_attrs['URL'] = '"%s"' % urls[fullname]
+                this_node_attrs['URL'] = f'"{urls[fullname]}"'
                 this_node_attrs['target'] = '"_top"'
             if tooltip:
                 this_node_attrs['tooltip'] = tooltip
@@ -325,10 +314,11 @@ class InheritanceGraph:
                        (name, self._format_node_attrs(this_node_attrs)))
 
             # Write the edges
-            for base_name in bases:
-                res.append('  "%s" -> "%s" [%s];\n' %
-                           (base_name, name,
-                            self._format_node_attrs(e_attrs)))
+            res.extend(
+                '  "%s" -> "%s" [%s];\n'
+                % (base_name, name, self._format_node_attrs(e_attrs))
+                for base_name in bases
+            )
         res.append('}\n')
         return ''.join(res)
 
@@ -365,8 +355,7 @@ class InheritanceDiagram(SphinxDirective):
         node['content'] = ', '.join(class_names)
         node['top-classes'] = []
         for cls in self.options.get('top-classes', '').split(','):
-            cls = cls.strip()
-            if cls:
+            if cls := cls.strip():
                 node['top-classes'].append(cls)
 
         # Create a graph starting with the list of classes
@@ -385,8 +374,7 @@ class InheritanceDiagram(SphinxDirective):
         # references to real URLs later.  These nodes will eventually be
         # removed from the doctree after we're done with them.
         for name in graph.get_all_class_names():
-            refnodes, x = class_role(  # type: ignore[call-arg,misc]
-                'class', ':class:`%s`' % name, name, 0, self.state)  # type: ignore[arg-type]
+            refnodes, x = class_role('class', f':class:`{name}`', name, 0, self.state)
             node.extend(refnodes)
         # Store the graph object so we can use it to generate the
         # dot file later
@@ -414,7 +402,7 @@ def html_visit_inheritance_diagram(self: HTML5Translator, node: inheritance_diag
     graph = node['graph']
 
     graph_hash = get_graph_hash(node)
-    name = 'inheritance%s' % graph_hash
+    name = f'inheritance{graph_hash}'
 
     # Create a mapping from fully-qualified class names to URLs.
     graphviz_output_format = self.builder.env.config.graphviz_output_format.upper()
@@ -432,7 +420,7 @@ def html_visit_inheritance_diagram(self: HTML5Translator, node: inheritance_diag
             urls[refname] = child.get('refuri')
         elif child.get('refid') is not None:
             if graphviz_output_format == 'SVG':
-                urls[child['reftitle']] = current_filename + '#' + child.get('refid')
+                urls[child['reftitle']] = f'{current_filename}#' + child.get('refid')
             else:
                 urls[child['reftitle']] = '#' + child.get('refid')
 
@@ -449,7 +437,7 @@ def latex_visit_inheritance_diagram(self: LaTeXTranslator, node: inheritance_dia
     graph = node['graph']
 
     graph_hash = get_graph_hash(node)
-    name = 'inheritance%s' % graph_hash
+    name = f'inheritance{graph_hash}'
 
     dotcode = graph.generate_dot(name, env=self.builder.env,
                                  graph_attrs={'size': '"6.0,6.0"'})
@@ -465,7 +453,7 @@ def texinfo_visit_inheritance_diagram(self: TexinfoTranslator, node: inheritance
     graph = node['graph']
 
     graph_hash = get_graph_hash(node)
-    name = 'inheritance%s' % graph_hash
+    name = f'inheritance{graph_hash}'
 
     dotcode = graph.generate_dot(name, env=self.builder.env,
                                  graph_attrs={'size': '"6.0,6.0"'})

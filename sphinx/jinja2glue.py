@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 def _tobool(val: str) -> bool:
     if isinstance(val, str):
-        return val.lower() in ('true', '1', 'yes', 'on')
+        return val.lower() in {'true', '1', 'yes', 'on'}
     return bool(val)
 
 
@@ -55,15 +55,13 @@ def _todim(val: int | str) -> str:
     if val is None:
         return 'initial'
     elif str(val).isdigit():
-        return '0' if int(val) == 0 else '%spx' % val
+        return '0' if int(val) == 0 else f'{val}px'
     return val  # type: ignore[return-value]
 
 
 def _slice_index(values: list, slices: int) -> Iterator[list]:
     seq = list(values)
-    length = 0
-    for value in values:
-        length += 1 + len(value[1][1])  # count includes subitems
+    length = sum(1 + len(value[1][1]) for value in values)
     items_per_slice = length // slices
     offset = 0
     for slice_number in range(slices):
@@ -86,7 +84,7 @@ def accesskey(context: Any, key: str) -> str:
         context.vars['_accesskeys'] = {}
     if key and key not in context.vars['_accesskeys']:
         context.vars['_accesskeys'][key] = 1
-        return 'accesskey="%s"' % key
+        return f'accesskey="{key}"'
     return ''
 
 
@@ -172,8 +170,8 @@ class BuiltinTemplateLoader(TemplateBridge, BaseLoader):
         if builder.config.templates_path:
             cfg_templates_path = [path.join(builder.confdir, tp)
                                   for tp in builder.config.templates_path]
-            pathchain[0:0] = cfg_templates_path
-            loaderchain[0:0] = cfg_templates_path
+            pathchain[:0] = cfg_templates_path
+            loaderchain[:0] = cfg_templates_path
 
         # store it for use in newest_template_mtime
         self.pathchain = pathchain

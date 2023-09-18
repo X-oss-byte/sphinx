@@ -40,7 +40,7 @@ class IndexEntries:
 
             # new entry types must be listed in directives/other.py!
             for entry_type, value, target_id, main, category_key in entries:
-                uri = rel_uri is not False and f'{rel_uri}#{target_id}'
+                uri = rel_uri and f'{rel_uri}#{target_id}'
                 try:
                     if entry_type == 'single':
                         try:
@@ -58,12 +58,30 @@ class IndexEntries:
                                    dic=new, link=uri, key=category_key)
                     elif entry_type == 'triple':
                         first, second, third = _split_into(3, 'triple', value)
-                        _add_entry(first, second + ' ' + third, main,
-                                   dic=new, link=uri, key=category_key)
-                        _add_entry(second, third + ', ' + first, main,
-                                   dic=new, link=uri, key=category_key)
-                        _add_entry(third, first + ' ' + second, main,
-                                   dic=new, link=uri, key=category_key)
+                        _add_entry(
+                            first,
+                            f'{second} {third}',
+                            main,
+                            dic=new,
+                            link=uri,
+                            key=category_key,
+                        )
+                        _add_entry(
+                            second,
+                            f'{third}, {first}',
+                            main,
+                            dic=new,
+                            link=uri,
+                            key=category_key,
+                        )
+                        _add_entry(
+                            third,
+                            f'{first} {second}',
+                            main,
+                            dic=new,
+                            link=uri,
+                            key=category_key,
+                        )
                     elif entry_type == 'see':
                         first, second = _split_into(2, 'see', value)
                         _add_entry(first, _('see %s') % second, None,
@@ -100,8 +118,7 @@ class IndexEntries:
                 key, (targets, sub_items, category_key) = new_list[i]
                 # cannot move if it has sub_items; structure gets too complex
                 if not sub_items:
-                    m = _fixre.match(key)
-                    if m:
+                    if m := _fixre.match(key):
                         if old_key == m.group(1):
                             # prefixes match: add entry as subitem of the
                             # previous entry
@@ -144,12 +161,7 @@ def _key_func_1(entry: tuple[str, list]) -> tuple[tuple[int, str], str]:
     if lc_key.startswith('\N{RIGHT-TO-LEFT MARK}'):
         lc_key = lc_key[1:]
 
-    if not lc_key[0:1].isalpha() and not lc_key.startswith('_'):
-        # put symbols at the front of the index (0)
-        group = 0
-    else:
-        # put non-symbol characters at the following group (1)
-        group = 1
+    group = 0 if not lc_key[:1].isalpha() and not lc_key.startswith('_') else 1
     # ensure a deterministic order *within* letters by also sorting on
     # the entry itself
     return (group, lc_key), entry[0]
@@ -160,7 +172,7 @@ def _key_func_2(entry: tuple[str, list]) -> str:
     key = unicodedata.normalize('NFD', entry[0].lower())
     if key.startswith('\N{RIGHT-TO-LEFT MARK}'):
         key = key[1:]
-    if key[0:1].isalpha() or key.startswith('_'):
+    if key[:1].isalpha() or key.startswith('_'):
         key = chr(127) + key
     return key
 
@@ -180,8 +192,4 @@ def _key_func_3(entry: tuple[str, list]) -> str:
     if key.startswith('\N{RIGHT-TO-LEFT MARK}'):
         key = key[1:]
     letter = unicodedata.normalize('NFD', key[0])[0].upper()
-    if letter.isalpha() or letter == '_':
-        return letter
-
-    # get all other symbols under one heading
-    return _('Symbols')
+    return letter if letter.isalpha() or letter == '_' else _('Symbols')

@@ -63,7 +63,7 @@ class TexinfoBuilder(Builder):
     def get_target_uri(self, docname: str, typ: str | None = None) -> str:
         if docname not in self.docnames:
             raise NoUri(docname, typ)
-        return '%' + docname
+        return f'%{docname}'
 
     def get_relative_uri(self, from_: str, to: str, typ: str | None = None) -> str:
         # ignore source path
@@ -84,7 +84,7 @@ class TexinfoBuilder(Builder):
                                   'document %s'), docname)
                 continue
             self.document_data.append(entry)  # type: ignore[arg-type]
-            if docname.endswith(SEP + 'index'):
+            if docname.endswith(f'{SEP}index'):
                 docname = docname[:-5]
             self.titles.append((docname, entry[2]))
 
@@ -120,7 +120,7 @@ class TexinfoBuilder(Builder):
                         read_config_files=True).get_default_values()
                 settings.author = author
                 settings.title = title
-                settings.texinfo_filename = targetname[:-5] + '.info'
+                settings.texinfo_filename = f'{targetname[:-5]}.info'
                 settings.texinfo_elements = self.config.texinfo_elements
                 settings.texinfo_dir_entry = direntry or ''
                 settings.texinfo_dir_category = category or ''
@@ -134,7 +134,7 @@ class TexinfoBuilder(Builder):
         self, indexfile: str, toctree_only: bool, appendices: list[str],
     ) -> nodes.document:
         self.docnames = set([indexfile] + appendices)
-        logger.info(darkgreen(indexfile) + " ", nonl=True)
+        logger.info(f"{darkgreen(indexfile)} ", nonl=True)
         tree = self.env.get_doctree(indexfile)
         tree['docname'] = indexfile
         if toctree_only:
@@ -169,8 +169,6 @@ class TexinfoBuilder(Builder):
                     newnodes.append(nodes.emphasis(title, title))
                     newnodes.append(nodes.Text(')'))
                     break
-            else:
-                pass
             pendingnode.replace_self(newnodes)
         return largetree
 
@@ -185,7 +183,7 @@ class TexinfoBuilder(Builder):
                                        stringify_func=stringify_func):
                 dest = self.images[src]
                 try:
-                    imagedir = path.join(self.outdir, targetname + '-figures')
+                    imagedir = path.join(self.outdir, f'{targetname}-figures')
                     ensuredir(imagedir)
                     copy_asset_file(path.join(self.srcdir, src),
                                     path.join(imagedir, dest))

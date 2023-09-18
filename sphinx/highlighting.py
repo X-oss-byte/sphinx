@@ -116,7 +116,7 @@ class PygmentsBridge:
             return get_style_by_name(stylename)
 
     def get_formatter(self, **kwargs: Any) -> Formatter:
-        kwargs.update(self.formatter_args)
+        kwargs |= self.formatter_args
         return self.formatter(**kwargs)
 
     def get_lexer(self, source: str, lang: str, opts: dict | None = None,
@@ -124,13 +124,8 @@ class PygmentsBridge:
         if not opts:
             opts = {}
 
-        # find out which lexer to use
         if lang in {'py', 'python', 'py3', 'python3', 'default'}:
-            if source.startswith('>>>'):
-                # interactive session
-                lang = 'pycon'
-            else:
-                lang = 'python'
+            lang = 'pycon' if source.startswith('>>>') else 'python'
         if lang == 'pycon3':
             lang = 'pycon'
 

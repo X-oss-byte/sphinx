@@ -33,9 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 def int_or_nothing(argument: str) -> int:
-    if not argument:
-        return 999
-    return int(argument)
+    return 999 if not argument else int(argument)
 
 
 class TocTree(SphinxDirective):

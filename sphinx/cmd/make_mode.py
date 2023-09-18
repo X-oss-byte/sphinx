@@ -94,7 +94,7 @@ class Make:
         if not color_terminal():
             nocolor()
 
-        print(bold("Sphinx v%s" % sphinx.__display_version__))
+        print(bold(f"Sphinx v{sphinx.__display_version__}"))
         print("Please use `make %s' where %s is one of" % ((blue('target'),) * 2))
         for osname, bname, description in BUILDERS:
             if not osname or os.name == osname:
@@ -113,7 +113,7 @@ class Make:
             with chdir(self.builddir_join('latex')):
                 return subprocess.call([makecmd, 'all-pdf'])
         except OSError:
-            print('Error: Failed to run: %s' % makecmd)
+            print(f'Error: Failed to run: {makecmd}')
             return 1
 
     def build_latexpdfja(self) -> int:
@@ -129,7 +129,7 @@ class Make:
             with chdir(self.builddir_join('latex')):
                 return subprocess.call([makecmd, 'all-pdf'])
         except OSError:
-            print('Error: Failed to run: %s' % makecmd)
+            print(f'Error: Failed to run: {makecmd}')
             return 1
 
     def build_info(self) -> int:
@@ -144,21 +144,19 @@ class Make:
             with chdir(self.builddir_join('texinfo')):
                 return subprocess.call([makecmd, 'info'])
         except OSError:
-            print('Error: Failed to run: %s' % makecmd)
+            print(f'Error: Failed to run: {makecmd}')
             return 1
 
     def build_gettext(self) -> int:
         dtdir = self.builddir_join('gettext', '.doctrees')
-        if self.run_generic_build('gettext', doctreedir=dtdir) > 0:
-            return 1
-        return 0
+        return 1 if self.run_generic_build('gettext', doctreedir=dtdir) > 0 else 0
 
     def run_generic_build(self, builder: str, doctreedir: str | None = None) -> int:
         # compatibility with old Makefile
         papersize = os.getenv('PAPER', '')
         opts = self.opts
         if papersize in ('a4', 'letter'):
-            opts.extend(['-D', 'latex_elements.papersize=' + papersize + 'paper'])
+            opts.extend(['-D', f'latex_elements.papersize={papersize}paper'])
         if doctreedir is None:
             doctreedir = self.builddir_join('doctrees')
 
@@ -175,7 +173,7 @@ def run_make_mode(args: Sequence[str]) -> int:
               'dir, build dir) are required.', file=sys.stderr)
         return 1
     make = Make(args[1], args[2], args[3:])
-    run_method = 'build_' + args[0]
+    run_method = f'build_{args[0]}'
     if hasattr(make, run_method):
         return getattr(make, run_method)()
     return make.run_generic_build(args[0])

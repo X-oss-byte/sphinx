@@ -612,7 +612,7 @@ class ASTBase(ASTBaseBase):
 class ASTIdentifier(ASTBase):
     def __init__(self, identifier: str) -> None:
         assert identifier is not None
-        assert len(identifier) != 0
+        assert identifier != ""
         self.identifier = identifier
 
     def _stringify(self, transform: StringifyTransform) -> str:
@@ -625,10 +625,7 @@ class ASTIdentifier(ASTBase):
         if self.is_anon() and version < 3:
             raise NoOldIdError
         if version == 1:
-            if self.identifier == 'size_t':
-                return 's'
-            else:
-                return self.identifier
+            return 's' if self.identifier == 'size_t' else self.identifier
         if self.identifier == "std":
             return 'St'
         elif self.identifier[0] == "~":
@@ -655,7 +652,11 @@ class ASTIdentifier(ASTBase):
             node = addnodes.desc_sig_name(text="[anonymous]")
         else:
             node = addnodes.desc_sig_name(self.identifier, self.identifier)
-        if mode == 'markType':
+        if mode == 'lastIsName':
+            nameNode = addnodes.desc_name()
+            nameNode += node
+            signode += nameNode
+        elif mode == 'markType':
             targetText = prefix + self.identifier + templateArgs
             pnode = addnodes.pending_xref('', refdomain='cpp',
                                           reftype='identifier',
@@ -664,10 +665,6 @@ class ASTIdentifier(ASTBase):
             pnode['cpp:parent_key'] = symbol.get_lookup_key()
             pnode += node
             signode += pnode
-        elif mode == 'lastIsName':
-            nameNode = addnodes.desc_name()
-            nameNode += node
-            signode += nameNode
         elif mode == 'noneIsName':
             signode += node
         elif mode == 'param':
@@ -675,10 +672,10 @@ class ASTIdentifier(ASTBase):
             signode += node
         elif mode == 'udl':
             # the target is 'operator""id' instead of just 'id'
-            assert len(prefix) == 0
-            assert len(templateArgs) == 0
+            assert not prefix
+            assert not templateArgs
             assert not self.is_anon()
-            targetText = 'operator""' + self.identifier
+            targetText = f'operator""{self.identifier}'
             pnode = addnodes.pending_xref('', refdomain='cpp',
                                           reftype='identifier',
                                           reftarget=targetText, modname=None,
@@ -687,7 +684,7 @@ class ASTIdentifier(ASTBase):
             pnode += node
             signode += pnode
         else:
-            raise Exception('Unknown description mode: %s' % mode)
+            raise Exception(f'Unknown description mode: {mode}')
 
 
 class ASTNestedNameElement(ASTBase):
@@ -722,7 +719,7 @@ class ASTNestedNameElement(ASTBase):
 class ASTNestedName(ASTBase):
     def __init__(self, names: list[ASTNestedNameElement],
                  templates: list[bool], rooted: bool) -> None:
-        assert len(names) > 0
+        assert names
         self.names = names
         self.templates = templates
         assert len(self.names) == len(self.templates)
@@ -750,12 +747,11 @@ class ASTNestedName(ASTBase):
                 return '::'.join(n.get_id(version) for n in self.names)
 
         res = []
-        if len(self.names) > 1 or len(modifiers) > 0:
+        if len(self.names) > 1 or modifiers != "":
             res.append('N')
         res.append(modifiers)
-        for n in self.names:
-            res.append(n.get_id(version))
-        if len(self.names) > 1 or len(modifiers) > 0:
+        res.extend(n.get_id(version) for n in self.names)
+        if len(self.names) > 1 or modifiers != "":
             res.append('E')
         return ''.join(res)
 
@@ -766,7 +762,7 @@ class ASTNestedName(ASTBase):
         for i in range(len(self.names)):
             n = self.names[i]
             if self.templates[i]:
-                res.append("template " + transform(n))
+                res.append(f"template {transform(n)}")
             else:
                 res.append(transform(n))
         return '::'.join(res)
@@ -779,25 +775,20 @@ class ASTNestedName(ASTBase):
             if self.rooted:
                 unreachable = "Can this happen?"
                 raise AssertionError(unreachable)  # TODO
-                signode += nodes.Text('::')
             for i in range(len(self.names)):
                 if i != 0:
                     unreachable = "Can this happen?"
                     raise AssertionError(unreachable)  # TODO
-                    signode += nodes.Text('::blah')
-                n = self.names[i]
                 if self.templates[i]:
-                    unreachable = "Can this happen?"
-                    raise AssertionError(unreachable)  # TODO
-                    signode += nodes.Text("template")
-                    signode += nodes.Text(" ")
+                    raise AssertionError("Can this happen?")
+                n = self.names[i]
                 n.describe_signature(signode, mode, env, '', symbol)
         elif mode == 'param':
             assert not self.rooted, str(self)
             assert len(self.names) == 1
             assert not self.templates[0]
             self.names[0].describe_signature(signode, 'param', env, '', symbol)
-        elif mode in ('markType', 'lastIsName', 'markName'):
+        elif mode in {'markType', 'lastIsName', 'markName'}:
             # Each element should be a pending xref targeting the complete
             # prefix. however, only the identifier part should be a link, such
             # that template args can be a link as well.
@@ -852,7 +843,7 @@ class ASTNestedName(ASTBase):
                     signode += addnodes.desc_sig_space()
                 self.names[-1].describe_signature(signode, mode, env, '', symbol)
         else:
-            raise Exception('Unknown description mode: %s' % mode)
+            raise Exception(f'Unknown description mode: {mode}')
 
 
 ################################################################################
@@ -892,16 +883,10 @@ class ASTBooleanLiteral(ASTLiteral):
         self.value = value
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        if self.value:
-            return 'true'
-        else:
-            return 'false'
+        return 'true' if self.value else 'false'
 
     def get_id(self, version: int) -> str:
-        if self.value:
-            return 'L1E'
-        else:
-            return 'L0E'
+        return 'L1E' if self.value else 'L0E'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -917,7 +902,7 @@ class ASTNumberLiteral(ASTLiteral):
 
     def get_id(self, version: int) -> str:
         # TODO: floats should be mangled by writing the hex of the binary representation
-        return "L%sE" % self.data.replace("'", "")
+        return f"""L{self.data.replace("'", "")}E"""
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -954,9 +939,9 @@ class ASTCharLiteral(ASTLiteral):
 
     def _stringify(self, transform: StringifyTransform) -> str:
         if self.prefix is None:
-            return "'" + self.data + "'"
+            return f"'{self.data}'"
         else:
-            return self.prefix + "'" + self.data + "'"
+            return f"{self.prefix}'{self.data}'"
 
     def get_id(self, version: int) -> str:
         # TODO: the ID should be have L E around it
@@ -966,7 +951,7 @@ class ASTCharLiteral(ASTLiteral):
                            env: BuildEnvironment, symbol: Symbol) -> None:
         if self.prefix is not None:
             signode += addnodes.desc_sig_keyword(self.prefix, self.prefix)
-        txt = "'" + self.data + "'"
+        txt = f"'{self.data}'"
         signode += addnodes.desc_sig_literal_char(txt, txt)
 
 
@@ -1013,16 +998,10 @@ class ASTFoldExpr(ASTExpression):
     def _stringify(self, transform: StringifyTransform) -> str:
         res = ['(']
         if self.leftExpr:
-            res.append(transform(self.leftExpr))
-            res.append(' ')
-            res.append(self.op)
-            res.append(' ')
+            res.extend((transform(self.leftExpr), ' ', self.op, ' '))
         res.append('...')
         if self.rightExpr:
-            res.append(' ')
-            res.append(self.op)
-            res.append(' ')
-            res.append(transform(self.rightExpr))
+            res.extend((' ', self.op, ' ', transform(self.rightExpr)))
         res.append(')')
         return ''.join(res)
 
@@ -1069,7 +1048,7 @@ class ASTParenExpr(ASTExpression):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return '(' + transform(self.expr) + ')'
+        return f'({transform(self.expr)})'
 
     def get_id(self, version: int) -> str:
         return self.expr.get_id(version)
@@ -1114,10 +1093,10 @@ class ASTPostfixArray(ASTPostfixOp):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return '[' + transform(self.expr) + ']'
+        return f'[{transform(self.expr)}]'
 
     def get_id(self, idPrefix: str, version: int) -> str:
-        return 'ix' + idPrefix + self.expr.get_id(version)
+        return f'ix{idPrefix}{self.expr.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1131,10 +1110,10 @@ class ASTPostfixMember(ASTPostfixOp):
         self.name = name
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return '.' + transform(self.name)
+        return f'.{transform(self.name)}'
 
     def get_id(self, idPrefix: str, version: int) -> str:
-        return 'dt' + idPrefix + self.name.get_id(version)
+        return f'dt{idPrefix}{self.name.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1147,10 +1126,10 @@ class ASTPostfixMemberOfPointer(ASTPostfixOp):
         self.name = name
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return '->' + transform(self.name)
+        return f'->{transform(self.name)}'
 
     def get_id(self, idPrefix: str, version: int) -> str:
-        return 'pt' + idPrefix + self.name.get_id(version)
+        return f'pt{idPrefix}{self.name.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1163,7 +1142,7 @@ class ASTPostfixInc(ASTPostfixOp):
         return '++'
 
     def get_id(self, idPrefix: str, version: int) -> str:
-        return 'pp' + idPrefix
+        return f'pp{idPrefix}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1175,7 +1154,7 @@ class ASTPostfixDec(ASTPostfixOp):
         return '--'
 
     def get_id(self, idPrefix: str, version: int) -> str:
-        return 'mm' + idPrefix
+        return f'mm{idPrefix}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1191,8 +1170,7 @@ class ASTPostfixCallExpr(ASTPostfixOp):
 
     def get_id(self, idPrefix: str, version: int) -> str:
         res = ['cl', idPrefix]
-        for e in self.lst.exprs:
-            res.append(e.get_id(version))
+        res.extend(e.get_id(version) for e in self.lst.exprs)
         res.append('E')
         return ''.join(res)
 
@@ -1208,8 +1186,7 @@ class ASTPostfixExpr(ASTExpression):
 
     def _stringify(self, transform: StringifyTransform) -> str:
         res = [transform(self.prefix)]
-        for p in self.postFixes:
-            res.append(transform(p))
+        res.extend(transform(p) for p in self.postFixes)
         return ''.join(res)
 
     def get_id(self, version: int) -> str:
@@ -1233,12 +1210,8 @@ class ASTExplicitCast(ASTExpression):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = [self.cast]
-        res.append('<')
-        res.append(transform(self.typ))
-        res.append('>(')
-        res.append(transform(self.expr))
-        res.append(')')
+        res = [self.cast, '<', transform(self.typ), '>(']
+        res.extend((transform(self.expr), ')'))
         return ''.join(res)
 
     def get_id(self, version: int) -> str:
@@ -1263,7 +1236,7 @@ class ASTTypeId(ASTExpression):
         self.isType = isType
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return 'typeid(' + transform(self.typeOrExpr) + ')'
+        return f'typeid({transform(self.typeOrExpr)})'
 
     def get_id(self, version: int) -> str:
         prefix = 'ti' if self.isType else 'te'
@@ -1287,7 +1260,7 @@ class ASTUnaryOpExpr(ASTExpression):
 
     def _stringify(self, transform: StringifyTransform) -> str:
         if self.op[0] in 'cn':
-            return self.op + " " + transform(self.expr)
+            return f"{self.op} {transform(self.expr)}"
         else:
             return self.op + transform(self.expr)
 
@@ -1309,10 +1282,10 @@ class ASTSizeofParamPack(ASTExpression):
         self.identifier = identifier
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return "sizeof...(" + transform(self.identifier) + ")"
+        return f"sizeof...({transform(self.identifier)})"
 
     def get_id(self, version: int) -> str:
-        return 'sZ' + self.identifier.get_id(version)
+        return f'sZ{self.identifier.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1329,10 +1302,10 @@ class ASTSizeofType(ASTExpression):
         self.typ = typ
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return "sizeof(" + transform(self.typ) + ")"
+        return f"sizeof({transform(self.typ)})"
 
     def get_id(self, version: int) -> str:
-        return 'st' + self.typ.get_id(version)
+        return f'st{self.typ.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1347,10 +1320,10 @@ class ASTSizeofExpr(ASTExpression):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return "sizeof " + transform(self.expr)
+        return f"sizeof {transform(self.expr)}"
 
     def get_id(self, version: int) -> str:
-        return 'sz' + self.expr.get_id(version)
+        return f'sz{self.expr.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1364,10 +1337,10 @@ class ASTAlignofExpr(ASTExpression):
         self.typ = typ
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return "alignof(" + transform(self.typ) + ")"
+        return f"alignof({transform(self.typ)})"
 
     def get_id(self, version: int) -> str:
-        return 'at' + self.typ.get_id(version)
+        return f'at{self.typ.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1382,10 +1355,10 @@ class ASTNoexceptExpr(ASTExpression):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return 'noexcept(' + transform(self.expr) + ')'
+        return f'noexcept({transform(self.expr)})'
 
     def get_id(self, version: int) -> str:
-        return 'nx' + self.expr.get_id(version)
+        return f'nx{self.expr.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1419,10 +1392,7 @@ class ASTNewExpr(ASTExpression):
 
     def get_id(self, version: int) -> str:
         # the array part will be in the type mangling, so na is not used
-        res = ['nw']
-        # TODO: placement
-        res.append('_')
-        res.append(self.typ.get_id(version))
+        res = ['nw', '_', self.typ.get_id(version)]
         if self.initList is not None:
             res.append(self.initList.get_id(version))
         else:
@@ -1461,10 +1431,7 @@ class ASTDeleteExpr(ASTExpression):
         return ''.join(res)
 
     def get_id(self, version: int) -> str:
-        if self.array:
-            id = "da"
-        else:
-            id = "dl"
+        id = "da" if self.array else "dl"
         return id + self.expr.get_id(version)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -1488,14 +1455,12 @@ class ASTCastExpr(ASTExpression):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = ['(']
-        res.append(transform(self.typ))
-        res.append(')')
+        res = ['(', transform(self.typ), ')']
         res.append(transform(self.expr))
         return ''.join(res)
 
     def get_id(self, version: int) -> str:
-        return 'cv' + self.typ.get_id(version) + self.expr.get_id(version)
+        return f'cv{self.typ.get_id(version)}{self.expr.get_id(version)}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1507,18 +1472,15 @@ class ASTCastExpr(ASTExpression):
 
 class ASTBinOpExpr(ASTExpression):
     def __init__(self, exprs: list[ASTExpression], ops: list[str]):
-        assert len(exprs) > 0
+        assert exprs
         assert len(exprs) == len(ops) + 1
         self.exprs = exprs
         self.ops = ops
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.exprs[0]))
+        res = [transform(self.exprs[0])]
         for i in range(1, len(self.exprs)):
-            res.append(' ')
-            res.append(self.ops[i - 1])
-            res.append(' ')
+            res.extend((' ', self.ops[i - 1], ' '))
             res.append(transform(self.exprs[i]))
         return ''.join(res)
 
@@ -1526,8 +1488,7 @@ class ASTBinOpExpr(ASTExpression):
         assert version >= 2
         res = []
         for i in range(len(self.ops)):
-            res.append(_id_operator_v2[self.ops[i]])
-            res.append(self.exprs[i].get_id(version))
+            res.extend((_id_operator_v2[self.ops[i]], self.exprs[i].get_id(version)))
         res.append(self.exprs[-1].get_id(version))
         return ''.join(res)
 
@@ -1553,19 +1514,14 @@ class ASTConditionalExpr(ASTExpression):
         self.elseExpr = elseExpr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.ifExpr))
-        res.append(' ? ')
-        res.append(transform(self.thenExpr))
-        res.append(' : ')
+        res = [transform(self.ifExpr), ' ? ']
+        res.extend((transform(self.thenExpr), ' : '))
         res.append(transform(self.elseExpr))
         return ''.join(res)
 
     def get_id(self, version: int) -> str:
         assert version >= 2
-        res = []
-        res.append(_id_operator_v2['?'])
-        res.append(self.ifExpr.get_id(version))
+        res = [_id_operator_v2['?'], self.ifExpr.get_id(version)]
         res.append(self.thenExpr.get_id(version))
         res.append(self.elseExpr.get_id(version))
         return ''.join(res)
@@ -1590,7 +1546,7 @@ class ASTBracedInitList(ASTBase):
         self.trailingComma = trailingComma
 
     def get_id(self, version: int) -> str:
-        return "il%sE" % ''.join(e.get_id(version) for e in self.exprs)
+        return f"il{''.join(e.get_id(version) for e in self.exprs)}E"
 
     def _stringify(self, transform: StringifyTransform) -> str:
         exprs = ', '.join(transform(e) for e in self.exprs)
@@ -1622,19 +1578,14 @@ class ASTAssignmentExpr(ASTExpression):
         self.rightExpr = rightExpr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.leftExpr))
-        res.append(' ')
-        res.append(self.op)
-        res.append(' ')
+        res = [transform(self.leftExpr), ' ']
+        res.extend((self.op, ' '))
         res.append(transform(self.rightExpr))
         return ''.join(res)
 
     def get_id(self, version: int) -> str:
         # we end up generating the ID from left to right, instead of right to left
-        res = []
-        res.append(_id_operator_v2[self.op])
-        res.append(self.leftExpr.get_id(version))
+        res = [_id_operator_v2[self.op], self.leftExpr.get_id(version)]
         res.append(self.rightExpr.get_id(version))
         return ''.join(res)
 
@@ -1652,7 +1603,7 @@ class ASTAssignmentExpr(ASTExpression):
 
 class ASTCommaExpr(ASTExpression):
     def __init__(self, exprs: list[ASTExpression]):
-        assert len(exprs) > 0
+        assert exprs
         self.exprs = exprs
 
     def _stringify(self, transform: StringifyTransform) -> str:
@@ -1662,8 +1613,7 @@ class ASTCommaExpr(ASTExpression):
         id_ = _id_operator_v2[',']
         res = []
         for i in range(len(self.exprs) - 1):
-            res.append(id_)
-            res.append(self.exprs[i].get_id(version))
+            res.extend((id_, self.exprs[i].get_id(version)))
         res.append(self.exprs[-1].get_id(version))
         return ''.join(res)
 
@@ -1761,9 +1711,9 @@ class ASTOperatorBuildIn(ASTOperator):
 
     def _stringify(self, transform: StringifyTransform) -> str:
         if self.op in ('new', 'new[]', 'delete', 'delete[]') or self.op[0] in "abcnox":
-            return 'operator ' + self.op
+            return f'operator {self.op}'
         else:
-            return 'operator' + self.op
+            return f'operator{self.op}'
 
     def _describe_identifier(self, signode: TextElement, identnode: TextElement,
                              env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1780,10 +1730,10 @@ class ASTOperatorLiteral(ASTOperator):
     def get_id(self, version: int) -> str:
         if version == 1:
             raise NoOldIdError
-        return 'li' + self.identifier.get_id(version)
+        return f'li{self.identifier.get_id(version)}'
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return 'operator""' + transform(self.identifier)
+        return f'operator""{transform(self.identifier)}'
 
     def _describe_identifier(self, signode: TextElement, identnode: TextElement,
                              env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1798,9 +1748,9 @@ class ASTOperatorType(ASTOperator):
 
     def get_id(self, version: int) -> str:
         if version == 1:
-            return 'castto-%s-operator' % self.type.get_id(version)
+            return f'castto-{self.type.get_id(version)}-operator'
         else:
-            return 'cv' + self.type.get_id(version)
+            return f'cv{self.type.get_id(version)}'
 
     def _stringify(self, transform: StringifyTransform) -> str:
         return ''.join(['operator ', transform(self.type)])
@@ -1825,9 +1775,7 @@ class ASTTemplateArgConstant(ASTBase):
     def get_id(self, version: int) -> str:
         if version == 1:
             return str(self).replace(' ', '-')
-        if version == 2:
-            return 'X' + str(self) + 'E'
-        return 'X' + self.value.get_id(version) + 'E'
+        return f'X{str(self)}E' if version == 2 else f'X{self.value.get_id(version)}E'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1844,17 +1792,12 @@ class ASTTemplateArgs(ASTBase):
 
     def get_id(self, version: int) -> str:
         if version == 1:
-            res = []
-            res.append(':')
-            res.append('.'.join(a.get_id(version) for a in self.args))
-            res.append(':')
+            res = [':', '.'.join((a.get_id(version) for a in self.args)), ':']
             return ''.join(res)
 
-        res = []
-        res.append('I')
+        res = ['I']
         if len(self.args) > 0:
-            for a in self.args[:-1]:
-                res.append(a.get_id(version))
+            res.extend(a.get_id(version) for a in self.args[:-1])
             if self.packExpansion:
                 res.append('J')
             res.append(self.args[-1].get_id(version))
@@ -1867,7 +1810,7 @@ class ASTTemplateArgs(ASTBase):
         res = ', '.join(transform(a) for a in self.args)
         if self.packExpansion:
             res += '...'
-        return '<' + res + '>'
+        return f'<{res}>'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1899,7 +1842,7 @@ class ASTTrailingTypeSpec(ASTBase):
 
 class ASTTrailingTypeSpecFundamental(ASTTrailingTypeSpec):
     def __init__(self, names: list[str], canonNames: list[str]) -> None:
-        assert len(names) != 0
+        assert names
         assert len(names) == len(canonNames), (names, canonNames)
         self.names = names
         # the canonical name list is for ID lookup
@@ -1959,12 +1902,12 @@ class ASTTrailingTypeSpecDecltype(ASTTrailingTypeSpec):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return 'decltype(' + transform(self.expr) + ')'
+        return f'decltype({transform(self.expr)})'
 
     def get_id(self, version: int) -> str:
         if version == 1:
             raise NoOldIdError
-        return 'DT' + self.expr.get_id(version) + "E"
+        return f'DT{self.expr.get_id(version)}E'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -1991,12 +1934,10 @@ class ASTTrailingTypeSpecName(ASTTrailingTypeSpec):
     def _stringify(self, transform: StringifyTransform) -> str:
         res = []
         if self.prefix:
-            res.append(self.prefix)
-            res.append(' ')
+            res.extend((self.prefix, ' '))
         res.append(transform(self.nestedName))
         if self.placeholderType is not None:
-            res.append(' ')
-            res.append(self.placeholderType)
+            res.extend((' ', self.placeholderType))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -2032,16 +1973,10 @@ class ASTFunctionParameter(ASTBase):
             # the anchor will be our parent
             return symbol.parent.declaration.get_id(version, prefixed=False)
         # else, do the usual
-        if self.ellipsis:
-            return 'z'
-        else:
-            return self.arg.get_id(version)
+        return 'z' if self.ellipsis else self.arg.get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        if self.ellipsis:
-            return '...'
-        else:
-            return transform(self.arg)
+        return '...' if self.ellipsis else transform(self.arg)
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -2057,9 +1992,7 @@ class ASTNoexceptSpec(ASTBase):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        if self.expr:
-            return 'noexcept(' + transform(self.expr) + ')'
-        return 'noexcept'
+        return f'noexcept({transform(self.expr)})' if self.expr else 'noexcept'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -2118,8 +2051,7 @@ class ASTParametersQualifiers(ASTBase):
             return ''.join(a.get_id(version) for a in self.args)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append('(')
+        res = ['(']
         first = True
         for a in self.args:
             if not first:
@@ -2132,24 +2064,19 @@ class ASTParametersQualifiers(ASTBase):
         if self.const:
             res.append(' const')
         if self.refQual:
-            res.append(' ')
-            res.append(self.refQual)
+            res.extend((' ', self.refQual))
         if self.exceptionSpec:
-            res.append(' ')
-            res.append(transform(self.exceptionSpec))
+            res.extend((' ', transform(self.exceptionSpec)))
         if self.trailingReturn:
-            res.append(' -> ')
-            res.append(transform(self.trailingReturn))
+            res.extend((' -> ', transform(self.trailingReturn)))
         if self.final:
             res.append(' final')
         if self.override:
             res.append(' override')
         if len(self.attrs) != 0:
-            res.append(' ')
-            res.append(transform(self.attrs))
+            res.extend((' ', transform(self.attrs)))
         if self.initializer:
-            res.append(' = ')
-            res.append(self.initializer)
+            res.extend((' = ', self.initializer))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -2228,9 +2155,7 @@ class ASTExplicitSpec(ASTBase):
     def _stringify(self, transform: StringifyTransform) -> str:
         res = ['explicit']
         if self.expr is not None:
-            res.append('(')
-            res.append(transform(self.expr))
-            res.append(')')
+            res.extend(('(', transform(self.expr), ')'))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement,
@@ -2357,8 +2282,7 @@ class ASTDeclSpecs(ASTBase):
 
     def get_id(self, version: int) -> str:
         if version == 1:
-            res = []
-            res.append(self.trailingTypeSpec.get_id(version))
+            res = [self.trailingTypeSpec.get_id(version)]
             if self.allSpecs.volatile:
                 res.append('V')
             if self.allSpecs.const:
@@ -2379,12 +2303,12 @@ class ASTDeclSpecs(ASTBase):
         if len(l) > 0:
             res.append(l)
         if self.trailingTypeSpec:
-            if len(res) > 0:
+            if res:
                 res.append(" ")
             res.append(transform(self.trailingTypeSpec))
             r = str(self.rightSpecs)
-            if len(r) > 0:
-                if len(res) > 0:
+            if r != "":
+                if res:
                     res.append(" ")
                 res.append(r)
         return "".join(res)
@@ -2404,7 +2328,7 @@ class ASTDeclSpecs(ASTBase):
                                                      symbol=symbol)
             addSpace = len(signode) != numChildren
 
-            if len(str(self.rightSpecs)) > 0:
+            if str(self.rightSpecs) != "":
                 if addSpace:
                     signode += addnodes.desc_sig_space()
                 self.rightSpecs.describe_signature(signode, env, symbol)
@@ -2418,23 +2342,14 @@ class ASTArray(ASTBase):
         self.size = size
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        if self.size:
-            return '[' + transform(self.size) + ']'
-        else:
-            return '[]'
+        return f'[{transform(self.size)}]' if self.size else '[]'
 
     def get_id(self, version: int) -> str:
         if version == 1:
             return 'A'
         if version == 2:
-            if self.size:
-                return 'A' + str(self.size) + '_'
-            else:
-                return 'A_'
-        if self.size:
-            return 'A' + self.size.get_id(version) + '_'
-        else:
-            return 'A_'
+            return f'A{str(self.size)}_' if self.size else 'A_'
+        return f'A{self.size.get_id(version)}_' if self.size else 'A_'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -2522,28 +2437,20 @@ class ASTDeclaratorNameParamQual(ASTDeclarator):
         # cv-qualifiers
         if self.paramQual:
             return self.paramQual.get_modifiers_id(version)
-        raise Exception("This should only be called on a function: %s" % self)
+        raise Exception(f"This should only be called on a function: {self}")
 
     def get_param_id(self, version: int) -> str:  # only the parameters (if any)
-        if self.paramQual:
-            return self.paramQual.get_param_id(version)
-        else:
-            return ''
+        return self.paramQual.get_param_id(version) if self.paramQual else ''
 
     def get_ptr_suffix_id(self, version: int) -> str:  # only the array specifiers
         return ''.join(a.get_id(version) for a in self.arrayOps)
 
     def get_type_id(self, version: int, returnTypeId: str) -> str:
         assert version >= 2
-        res = []
-        # TODO: can we actually have both array ops and paramQual?
-        res.append(self.get_ptr_suffix_id(version))
+        res = [self.get_ptr_suffix_id(version)]
         if self.paramQual:
-            res.append(self.get_modifiers_id(version))
-            res.append('F')
-            res.append(returnTypeId)
-            res.append(self.get_param_id(version))
-            res.append('E')
+            res.extend((self.get_modifiers_id(version), 'F', returnTypeId))
+            res.extend((self.get_param_id(version), 'E'))
         else:
             res.append(returnTypeId)
         return ''.join(res)
@@ -2560,8 +2467,7 @@ class ASTDeclaratorNameParamQual(ASTDeclarator):
         res = []
         if self.declId:
             res.append(transform(self.declId))
-        for op in self.arrayOps:
-            res.append(transform(op))
+        res.extend(transform(op) for op in self.arrayOps)
         if self.paramQual:
             res.append(transform(self.paramQual))
         return ''.join(res)
@@ -2608,8 +2514,7 @@ class ASTDeclaratorNameBitField(ASTDeclarator):
         res = []
         if self.declId:
             res.append(transform(self.declId))
-        res.append(" : ")
-        res.append(transform(self.size))
+        res.extend((" : ", transform(self.size)))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -2656,8 +2561,7 @@ class ASTDeclaratorPtr(ASTDeclarator):
         return self.next.require_space_after_declSpecs()
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = ['*']
-        res.append(transform(self.attrs))
+        res = ['*', transform(self.attrs)]
         if len(self.attrs) != 0 and (self.volatile or self.const):
             res.append(' ')
         if self.volatile:
@@ -2666,8 +2570,8 @@ class ASTDeclaratorPtr(ASTDeclarator):
             if self.volatile:
                 res.append(' ')
             res.append('const')
-        if self.const or self.volatile or len(self.attrs) > 0:
-            if self.next.require_space_after_declSpecs():
+        if self.next.require_space_after_declSpecs():
+            if self.const or self.volatile or len(self.attrs) > 0:
                 res.append(' ')
         res.append(transform(self.next))
         return ''.join(res)
@@ -2688,8 +2592,7 @@ class ASTDeclaratorPtr(ASTDeclarator):
             res.append(self.next.get_ptr_suffix_id(version))
             return ''.join(res)
 
-        res = [self.next.get_ptr_suffix_id(version)]
-        res.append('P')
+        res = [self.next.get_ptr_suffix_id(version), 'P']
         if self.volatile:
             res.append('V')
         if self.const:
@@ -2761,8 +2664,7 @@ class ASTDeclaratorRef(ASTDeclarator):
         return self.next.require_space_after_declSpecs()
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = ['&']
-        res.append(transform(self.attrs))
+        res = ['&', transform(self.attrs)]
         if len(self.attrs) != 0 and self.next.require_space_after_declSpecs():
             res.append(' ')
         res.append(transform(self.next))
@@ -2776,14 +2678,14 @@ class ASTDeclaratorRef(ASTDeclarator):
 
     def get_ptr_suffix_id(self, version: int) -> str:
         if version == 1:
-            return 'R' + self.next.get_ptr_suffix_id(version)
+            return f'R{self.next.get_ptr_suffix_id(version)}'
         else:
-            return self.next.get_ptr_suffix_id(version) + 'R'
+            return f'{self.next.get_ptr_suffix_id(version)}R'
 
     def get_type_id(self, version: int, returnTypeId: str) -> str:
         assert version >= 2
         # ReturnType &next, so we are part of the return type of 'next
-        return self.next.get_type_id(version, returnTypeId='R' + returnTypeId)
+        return self.next.get_type_id(version, returnTypeId=f'R{returnTypeId}')
 
     def is_function_type(self) -> bool:
         return self.next.is_function_type()
@@ -2829,8 +2731,8 @@ class ASTDeclaratorParamPack(ASTDeclarator):
     def _stringify(self, transform: StringifyTransform) -> str:
         res = transform(self.next)
         if self.next.name:
-            res = ' ' + res
-        return '...' + res
+            res = f' {res}'
+        return f'...{res}'
 
     def get_modifiers_id(self, version: int) -> str:
         return self.next.get_modifiers_id(version)
@@ -2840,14 +2742,14 @@ class ASTDeclaratorParamPack(ASTDeclarator):
 
     def get_ptr_suffix_id(self, version: int) -> str:
         if version == 1:
-            return 'Dp' + self.next.get_ptr_suffix_id(version)
+            return f'Dp{self.next.get_ptr_suffix_id(version)}'
         else:
-            return self.next.get_ptr_suffix_id(version) + 'Dp'
+            return f'{self.next.get_ptr_suffix_id(version)}Dp'
 
     def get_type_id(self, version: int, returnTypeId: str) -> str:
         assert version >= 2
         # ReturnType... next, so we are part of the return type of 'next
-        return self.next.get_type_id(version, returnTypeId='Dp' + returnTypeId)
+        return self.next.get_type_id(version, returnTypeId=f'Dp{returnTypeId}')
 
     def is_function_type(self) -> bool:
         return self.next.is_function_type()
@@ -2895,9 +2797,7 @@ class ASTDeclaratorMemPtr(ASTDeclarator):
         return True
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.className))
-        res.append('::*')
+        res = [transform(self.className), '::*']
         if self.volatile:
             res.append('volatile')
         if self.const:
@@ -2923,7 +2823,6 @@ class ASTDeclaratorMemPtr(ASTDeclarator):
         if version == 1:
             raise NoOldIdError
         raise NotImplementedError
-        return self.next.get_ptr_suffix_id(version) + 'Dp'
 
     def get_type_id(self, version: int, returnTypeId: str) -> str:
         assert version >= 2
@@ -2993,9 +2892,7 @@ class ASTDeclaratorParen(ASTDeclarator):
         return True
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = ['(']
-        res.append(transform(self.inner))
-        res.append(')')
+        res = ['(', transform(self.inner), ')']
         res.append(transform(self.next))
         return ''.join(res)
 
@@ -3008,10 +2905,8 @@ class ASTDeclaratorParen(ASTDeclarator):
     def get_ptr_suffix_id(self, version: int) -> str:
         if version == 1:
             raise NoOldIdError  # TODO: was this implemented before?
-            return self.next.get_ptr_suffix_id(version) + \
-                self.inner.get_ptr_suffix_id(version)
         return self.inner.get_ptr_suffix_id(version) + \
-            self.next.get_ptr_suffix_id(version)
+                self.next.get_ptr_suffix_id(version)
 
     def get_type_id(self, version: int, returnTypeId: str) -> str:
         assert version >= 2
@@ -3039,11 +2934,11 @@ class ASTPackExpansionExpr(ASTExpression):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return transform(self.expr) + '...'
+        return f'{transform(self.expr)}...'
 
     def get_id(self, version: int) -> str:
         id = self.expr.get_id(version)
-        return 'sp' + id
+        return f'sp{id}'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -3056,11 +2951,11 @@ class ASTParenExprList(ASTBaseParenExprList):
         self.exprs = exprs
 
     def get_id(self, version: int) -> str:
-        return "pi%sE" % ''.join(e.get_id(version) for e in self.exprs)
+        return f"pi{''.join(e.get_id(version) for e in self.exprs)}E"
 
     def _stringify(self, transform: StringifyTransform) -> str:
         exprs = [transform(e) for e in self.exprs]
-        return '(%s)' % ', '.join(exprs)
+        return f"({', '.join(exprs)})"
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -3085,10 +2980,7 @@ class ASTInitializer(ASTBase):
 
     def _stringify(self, transform: StringifyTransform) -> str:
         val = transform(self.value)
-        if self.hasAssign:
-            return ' = ' + val
-        else:
-            return val
+        return f' = {val}' if self.hasAssign else val
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
@@ -3133,9 +3025,13 @@ class ASTType(ASTBase):
             res = []
             if objectType:  # needs the name
                 if objectType == 'function':  # also modifiers
-                    res.append(symbol.get_full_nested_name().get_id(version))
-                    res.append(self.decl.get_param_id(version))
-                    res.append(self.decl.get_modifiers_id(version))
+                    res.extend(
+                        (
+                            symbol.get_full_nested_name().get_id(version),
+                            self.decl.get_param_id(version),
+                            self.decl.get_modifiers_id(version),
+                        )
+                    )
                     if (self.declSpecs.leftSpecs.constexpr or
                             (self.declSpecs.rightSpecs and
                              self.declSpecs.rightSpecs.constexpr)):
@@ -3144,12 +3040,16 @@ class ASTType(ASTBase):
                     res.append(symbol.get_full_nested_name().get_id(version))
                 else:
                     raise AssertionError(objectType)
-            else:  # only type encoding
-                if self.decl.is_function_type():
-                    raise NoOldIdError
-                res.append(self.declSpecs.get_id(version))
-                res.append(self.decl.get_ptr_suffix_id(version))
-                res.append(self.decl.get_param_id(version))
+            elif self.decl.is_function_type():
+                raise NoOldIdError
+            else:
+                res.extend(
+                    (
+                        self.declSpecs.get_id(version),
+                        self.decl.get_ptr_suffix_id(version),
+                        self.decl.get_param_id(version),
+                    )
+                )
             return ''.join(res)
         # other versions
         res = []
@@ -3166,8 +3066,7 @@ class ASTType(ASTBase):
                             returnTypeId = self.trailingReturn.get_id(version)
                         else:
                             returnTypeId = self.declSpecs.get_id(version)
-                        res.append(typeId)
-                        res.append(returnTypeId)
+                        res.extend((typeId, returnTypeId))
                 res.append(self.decl.get_param_id(version))
             elif objectType == 'type':  # just the name
                 res.append(symbol.get_full_nested_name().get_id(version))
@@ -3182,26 +3081,21 @@ class ASTType(ASTBase):
         return ''.join(res)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
         declSpecs = transform(self.declSpecs)
-        res.append(declSpecs)
+        res = [declSpecs]
         if self.decl.require_space_after_declSpecs() and len(declSpecs) > 0:
             res.append(' ')
         res.append(transform(self.decl))
         return ''.join(res)
 
     def get_type_declaration_prefix(self) -> str:
-        if self.declSpecs.trailingTypeSpec:
-            return 'typedef'
-        else:
-            return 'type'
+        return 'typedef' if self.declSpecs.trailingTypeSpec else 'type'
 
     def describe_signature(self, signode: TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:
         verify_description_mode(mode)
         self.declSpecs.describe_signature(signode, 'markType', env, symbol)
-        if (self.decl.require_space_after_declSpecs() and
-                len(str(self.declSpecs)) > 0):
+        if self.decl.require_space_after_declSpecs() and str(self.declSpecs) != "":
             signode += addnodes.desc_sig_space()
         # for parameters that don't really declare new names we get 'markType',
         # this should not be propagated, but be 'noneIsName'.
@@ -3270,13 +3164,11 @@ class ASTTypeWithInit(ASTBase):
         if objectType != 'member':
             return self.type.get_id(version, objectType)
         if version == 1:
-            return (symbol.get_full_nested_name().get_id(version) + '__' +
-                    self.type.get_id(version))
+            return f'{symbol.get_full_nested_name().get_id(version)}__{self.type.get_id(version)}'
         return symbol.get_full_nested_name().get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.type))
+        res = [transform(self.type)]
         if self.init:
             res.append(transform(self.init))
         return ''.join(res)
@@ -3301,8 +3193,7 @@ class ASTTypeUsing(ASTBase):
         return symbol.get_full_nested_name().get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.name))
+        res = [transform(self.name)]
         if self.type:
             res.append(' = ')
             res.append(transform(self.type))
@@ -3364,8 +3255,7 @@ class ASTBaseClass(ASTBase):
     def _stringify(self, transform: StringifyTransform) -> str:
         res = []
         if self.visibility is not None:
-            res.append(self.visibility)
-            res.append(' ')
+            res.extend((self.visibility, ' '))
         if self.virtual:
             res.append('virtual ')
         res.append(transform(self.name))
@@ -3400,8 +3290,7 @@ class ASTClass(ASTBase):
         return symbol.get_full_nested_name().get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.attrs))
+        res = [transform(self.attrs)]
         if len(self.attrs) != 0:
             res.append(' ')
         res.append(transform(self.name))
@@ -3450,8 +3339,7 @@ class ASTUnion(ASTBase):
         return symbol.get_full_nested_name().get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.attrs))
+        res = [transform(self.attrs)]
         if len(self.attrs) != 0:
             res.append(' ')
         res.append(transform(self.name))
@@ -3482,15 +3370,13 @@ class ASTEnum(ASTBase):
     def _stringify(self, transform: StringifyTransform) -> str:
         res = []
         if self.scoped:
-            res.append(self.scoped)
-            res.append(' ')
+            res.extend((self.scoped, ' '))
         res.append(transform(self.attrs))
         if len(self.attrs) != 0:
             res.append(' ')
         res.append(transform(self.name))
         if self.underlyingType:
-            res.append(' : ')
-            res.append(transform(self.underlyingType))
+            res.extend((' : ', transform(self.underlyingType)))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -3522,8 +3408,7 @@ class ASTEnumerator(ASTBase):
         return symbol.get_full_nested_name().get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.name))
+        res = [transform(self.name)]
         if len(self.attrs) != 0:
             res.append(' ')
             res.append(transform(self.attrs))
@@ -3604,8 +3489,7 @@ class ASTTemplateKeyParamPackIdDefault(ASTTemplateParam):
                 res.append(' ')
             res.append(transform(self.identifier))
         if self.default:
-            res.append(' = ')
-            res.append(transform(self.default))
+            res.extend((' = ', transform(self.default)))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -3721,8 +3605,7 @@ class ASTTemplateParamNonType(ASTTemplateParam):
         return self.param.isPack or self.parameterPack
 
     def get_identifier(self) -> ASTIdentifier:
-        name = self.param.name
-        if name:
+        if name := self.param.name:
             assert len(name.names) == 1
             assert name.names[0].identOrOp
             assert not name.names[0].templateArgs
@@ -3736,15 +3619,13 @@ class ASTTemplateParamNonType(ASTTemplateParam):
         self, version: int, objectType: str | None = None, symbol: Symbol | None = None,
     ) -> str:
         assert version >= 2
-        # this is not part of the normal name mangling in C++
         if symbol:
             # the anchor will be our parent
             return symbol.parent.declaration.get_id(version, prefixed=None)
-        else:
-            res = '_'
-            if self.parameterPack:
-                res += 'Dp'
-            return res + self.param.get_id(version)
+        res = '_'
+        if self.parameterPack:
+            res += 'Dp'
+        return res + self.param.get_id(version)
 
     def _stringify(self, transform: StringifyTransform) -> str:
         res = transform(self.param)
@@ -3768,25 +3649,17 @@ class ASTTemplateParams(ASTBase):
 
     def get_id(self, version: int, excludeRequires: bool = False) -> str:
         assert version >= 2
-        res = []
-        res.append("I")
-        for param in self.params:
-            res.append(param.get_id(version))
+        res = ["I"]
+        res.extend(param.get_id(version) for param in self.params)
         res.append("E")
         if not excludeRequires and self.requiresClause:
-            res.append('IQ')
-            res.append(self.requiresClause.expr.get_id(version))
-            res.append('E')
+            res.extend(('IQ', self.requiresClause.expr.get_id(version), 'E'))
         return ''.join(res)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append("template<")
-        res.append(", ".join(transform(a) for a in self.params))
-        res.append("> ")
+        res = ["template<", ", ".join((transform(a) for a in self.params)), "> "]
         if self.requiresClause is not None:
-            res.append(transform(self.requiresClause))
-            res.append(" ")
+            res.extend((transform(self.requiresClause), " "))
         return ''.join(res)
 
     def describe_signature(self, signode: TextElement, mode: str,
@@ -3864,19 +3737,13 @@ class ASTTemplateIntroductionParameter(ASTBase):
             # the anchor will be our parent
             return symbol.parent.declaration.get_id(version, prefixed=None)
         else:
-            if self.parameterPack:
-                return 'Dp'
-            else:
-                return '0'  # we need to put something
+            return 'Dp' if self.parameterPack else '0'
 
     def get_id_as_arg(self, version: int) -> str:
         assert version >= 2
         # used for the implicit requires clause
         res = self.identifier.get_id(version)
-        if self.parameterPack:
-            return 'sp' + res
-        else:
-            return res
+        return f'sp{res}' if self.parameterPack else res
 
     def _stringify(self, transform: StringifyTransform) -> str:
         res = []
@@ -3895,34 +3762,23 @@ class ASTTemplateIntroductionParameter(ASTBase):
 class ASTTemplateIntroduction(ASTBase):
     def __init__(self, concept: ASTNestedName,
                  params: list[ASTTemplateIntroductionParameter]) -> None:
-        assert len(params) > 0
+        assert params
         self.concept = concept
         self.params = params
 
     def get_id(self, version: int) -> str:
         assert version >= 2
         # first do the same as a normal template parameter list
-        res = []
-        res.append("I")
-        for param in self.params:
-            res.append(param.get_id(version))
-        res.append("E")
-        # let's use X expr E, which is otherwise for constant template args
-        res.append("X")
-        res.append(self.concept.get_id(version))
-        res.append("I")
-        for param in self.params:
-            res.append(param.get_id_as_arg(version))
-        res.append("E")
-        res.append("E")
+        res = ["I"]
+        res.extend(param.get_id(version) for param in self.params)
+        res.extend(("E", "X", self.concept.get_id(version), "I"))
+        res.extend(param.get_id_as_arg(version) for param in self.params)
+        res.extend(("E", "E"))
         return ''.join(res)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        res.append(transform(self.concept))
-        res.append('{')
-        res.append(', '.join(transform(param) for param in self.params))
-        res.append('} ')
+        res = [transform(self.concept), '{']
+        res.extend((', '.join(transform(param) for param in self.params), '} '))
         return ''.join(res)
 
     def describe_signature_as_introducer(
@@ -3973,9 +3829,7 @@ class ASTTemplateDeclarationPrefix(ASTBase):
         return ''.join(res)
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        res = []
-        for t in self.templates:
-            res.append(transform(t))
+        res = [transform(t) for t in self.templates]
         return ''.join(res)
 
     def describe_signature(self, signode: desc_signature, mode: str,
@@ -3990,7 +3844,7 @@ class ASTRequiresClause(ASTBase):
         self.expr = expr
 
     def _stringify(self, transform: StringifyTransform) -> str:
-        return 'requires ' + transform(self.expr)
+        return f'requires {transform(self.expr)}'
 
     def describe_signature(self, signode: nodes.TextElement, mode: str,
                            env: BuildEnvironment, symbol: Symbol) -> None:

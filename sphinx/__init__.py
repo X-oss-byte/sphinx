@@ -1,5 +1,6 @@
 """The Sphinx documentation toolchain."""
 
+
 # Keep this file executable as-is in Python 3!
 # (Otherwise getting the version out of it when packaging is impossible.)
 
@@ -47,7 +48,7 @@ if _in_development:
             encoding='ascii',
             errors='surrogateescape',
         ).stdout:
-            __display_version__ += '+/' + ret.strip()
+            __display_version__ += f'+/{ret.strip()}'
         del ret
     finally:
         del subprocess

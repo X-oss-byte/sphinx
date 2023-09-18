@@ -125,10 +125,9 @@ class SingleFileHTMLBuilder(StandaloneHTMLBuilder):
         return {self.config.root_doc: new_fignumbers}
 
     def get_doc_context(self, docname: str, body: str, metatags: str) -> dict[str, Any]:
-        # no relation links...
-        toctree = global_toctree_for_doc(self.env, self.config.root_doc, self, collapse=False)
-        # if there is no toctree, toc is None
-        if toctree:
+        if toctree := global_toctree_for_doc(
+            self.env, self.config.root_doc, self, collapse=False
+        ):
             self.fix_refuris(toctree)
             toc = self.render_partial(toctree)['fragment']
             display_toc = True
@@ -180,7 +179,7 @@ class SingleFileHTMLBuilder(StandaloneHTMLBuilder):
 
         # additional pages from conf.py
         for pagename, template in self.config.html_additional_pages.items():
-            logger.info(' ' + pagename, nonl=True)
+            logger.info(f' {pagename}', nonl=True)
             self.handle_page(pagename, {}, template)
 
         if self.config.html_use_opensearch:

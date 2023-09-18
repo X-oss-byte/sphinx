@@ -143,7 +143,7 @@ class AutosummaryRenderer:
         except TemplateNotFound:
             try:
                 # objtype is given as template_name
-                template = self.env.get_template('autosummary/%s.rst' % template_name)
+                template = self.env.get_template(f'autosummary/{template_name}.rst')
             except TemplateNotFound:
                 # fallback to base.rst
                 template = self.env.get_template('autosummary/base.rst')
@@ -234,11 +234,8 @@ class ModuleScanner:
 
             respect_module_all = not self.app.config.autosummary_ignore_module_all
             if (
-                # list all members up
                 imported_members
-                # list not-imported members
-                or imported is False
-                # list members that have __all__ set
+                or not imported
                 or (respect_module_all and '__all__' in dir(self.object))
             ):
                 members.append(name)
@@ -265,9 +262,7 @@ def generate_autosummary_content(name: str, obj: Any, parent: Any,
                                  qualname: str | None = None) -> str:
     doc = get_documenter(app, obj, parent)
 
-    ns: dict[str, Any] = {}
-    ns.update(context)
-
+    ns: dict[str, Any] = dict(context)
     if doc.objtype == 'module':
         scanner = ModuleScanner(app, obj)
         ns['members'] = scanner.scan(imported_members)
@@ -304,9 +299,10 @@ def generate_autosummary_content(name: str, obj: Any, parent: Any,
                 imported_modules, all_imported_modules = \
                     _get_members(doc, app, obj, {'module'}, imported=True)
                 skip += all_imported_modules
-                imported_modules = [name + '.' + modname for modname in imported_modules]
-                all_imported_modules = \
-                    [name + '.' + modname for modname in all_imported_modules]
+                imported_modules = [f'{name}.{modname}' for modname in imported_modules]
+                all_imported_modules = [
+                    f'{name}.{modname}' for modname in all_imported_modules
+                ]
                 public_members = getall(obj)
             else:
                 imported_modules, all_imported_modules = [], []
@@ -440,7 +436,7 @@ def _get_modules(
         if modname in skip:
             # module was overwritten in __init__.py, so not accessible
             continue
-        fullname = name + '.' + modname
+        fullname = f'{name}.{modname}'
         try:
             module = import_module(fullname)
             if module and hasattr(module, '__sphinx_mock__'):
@@ -449,12 +445,13 @@ def _get_modules(
             pass
 
         items.append(fullname)
-        if public_members is not None:
-            if modname in public_members:
-                public.append(fullname)
-        else:
-            if not modname.startswith('_'):
-                public.append(fullname)
+        if (
+            public_members is not None
+            and modname in public_members
+            or public_members is None
+            and not modname.startswith('_')
+        ):
+            public.append(fullname)
     return public, items
 
 
@@ -484,11 +481,7 @@ def generate_autosummary_docs(sources: list[str],
     # keep track of new files
     new_files = []
 
-    if app:
-        filename_map = app.config.autosummary_filename_map
-    else:
-        filename_map = {}
-
+    filename_map = app.config.autosummary_filename_map if app else {}
     # write
     for entry in sorted(set(items), key=str):
         if entry.path is None:
@@ -501,12 +494,12 @@ def generate_autosummary_docs(sources: list[str],
 
         try:
             name, obj, parent, modname = import_by_name(entry.name)
-            qualname = name.replace(modname + ".", "")
+            qualname = name.replace(f"{modname}.", "")
         except ImportExceptionGroup as exc:
             try:
                 # try to import as an instance attribute
                 name, obj, parent, modname = import_ivar_by_name(entry.name)
-                qualname = name.replace(modname + ".", "")
+                qualname = name.replace(f"{modname}.", "")
             except ImportError as exc2:
                 if exc2.__cause__:
                     exceptions: list[BaseException] = exc.exceptions + [exc2.__cause__]
@@ -520,7 +513,7 @@ def generate_autosummary_docs(sources: list[str],
 
         context: dict[str, Any] = {}
         if app:
-            context.update(app.config.autosummary_context)
+            context |= app.config.autosummary_context
 
         content = generate_autosummary_content(name, obj, parent, template, entry.template,
                                                imported_members, app, entry.recursive, context,
@@ -626,40 +619,37 @@ def find_autosummary_in_lines(
                 recursive = True
                 continue
 
-            m = toctree_arg_re.match(line)
-            if m:
+            if m := toctree_arg_re.match(line):
                 toctree = m.group(1)
                 if filename:
                     toctree = os.path.join(os.path.dirname(filename),
                                            toctree)
                 continue
 
-            m = template_arg_re.match(line)
-            if m:
+            if m := template_arg_re.match(line):
                 template = m.group(1).strip()
                 continue
 
             if line.strip().startswith(':'):
                 continue  # skip options
 
-            m = autosummary_item_re.match(line)
-            if m:
+            if m := autosummary_item_re.match(line):
                 name = m.group(1).strip()
                 if name.startswith('~'):
                     name = name[1:]
-                if current_module and \
-                   not name.startswith(current_module + '.'):
+                if current_module and not name.startswith(
+                    f'{current_module}.'
+                ):
                     name = f"{current_module}.{name}"
                 documented.append(AutosummaryEntry(name, toctree, template, recursive))
                 continue
 
-            if not line.strip() or line.startswith(base_indent + " "):
+            if not line.strip() or line.startswith(f"{base_indent} "):
                 continue
 
             in_autosummary = False
 
-        m = autosummary_re.match(line)
-        if m:
+        if m := autosummary_re.match(line):
             in_autosummary = True
             base_indent = m.group(1)
             recursive = False
@@ -667,16 +657,14 @@ def find_autosummary_in_lines(
             template = ''
             continue
 
-        m = automodule_re.search(line)
-        if m:
+        if m := automodule_re.search(line):
             current_module = m.group(1).strip()
             # recurse into the automodule docstring
             documented.extend(find_autosummary_in_docstring(
                 current_module, filename=filename))
             continue
 
-        m = module_re.match(line)
-        if m:
+        if m := module_re.match(line):
             current_module = m.group(2)
             continue
 
@@ -744,10 +732,13 @@ def main(argv: Sequence[str] = (), /) -> None:
         not args.respect_module_all
     )
 
-    generate_autosummary_docs(args.source_file, args.output_dir,
-                              '.' + args.suffix,
-                              imported_members=args.imported_members,
-                              app=app)
+    generate_autosummary_docs(
+        args.source_file,
+        args.output_dir,
+        f'.{args.suffix}',
+        imported_members=args.imported_members,
+        app=app,
+    )
 
 
 if __name__ == '__main__':

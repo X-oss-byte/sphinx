@@ -348,11 +348,11 @@ class BuildEnvironment:
         condition: bool | Callable
         if callable(method):
             condition = method
-        else:
-            if method not in versioning_conditions:
-                raise ValueError('invalid versioning method: %r' % method)
+        elif method in versioning_conditions:
             condition = versioning_conditions[method]
 
+        else:
+            raise ValueError('invalid versioning method: %r' % method)
         if self.versioning_condition not in (None, condition):
             raise SphinxError(__('This environment is incompatible with the '
                                  'selected builder, please choose another '
@@ -474,7 +474,7 @@ class BuildEnvironment:
                     added.add(docname)
                     continue
                 # if the doctree file is not there, rebuild
-                filename = path.join(self.doctreedir, docname + '.doctree')
+                filename = path.join(self.doctreedir, f'{docname}.doctree')
                 if not path.isfile(filename):
                     logger.debug('[build target] changed %r', docname)
                     changed.add(docname)
@@ -551,7 +551,7 @@ class BuildEnvironment:
 
         The number is guaranteed to be unique in the current document.
         """
-        key = category + 'serialno'
+        key = f'{category}serialno'
         cur = self.temp_data.get(key, 0)
         self.temp_data[key] = cur + 1
         return cur
@@ -572,8 +572,7 @@ class BuildEnvironment:
 
         *filename* should be absolute or relative to the source directory.
         """
-        doc = self.path2doc(filename)
-        if doc:
+        if doc := self.path2doc(filename):
             self.included[self.docname].add(doc)
 
     def note_reread(self) -> None:
@@ -599,7 +598,7 @@ class BuildEnvironment:
         try:
             serialised = self._pickled_doctree_cache[docname]
         except KeyError:
-            filename = path.join(self.doctreedir, docname + '.doctree')
+            filename = path.join(self.doctreedir, f'{docname}.doctree')
             with open(filename, 'rb') as f:
                 serialised = self._pickled_doctree_cache[docname] = f.read()
 

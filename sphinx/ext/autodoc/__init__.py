@@ -139,11 +139,7 @@ SUPPRESS = object()
 
 
 def annotation_option(arg: Any) -> Any:
-    if arg in (None, True):
-        # suppress showing the representation of the object
-        return SUPPRESS
-    else:
-        return arg
+    return SUPPRESS if arg in (None, True) else arg
 
 
 def bool_option(arg: Any) -> bool:
@@ -450,9 +446,7 @@ class Documenter:
 
         subject = inspect.unpartial(self.object)
         modname = self.get_attr(subject, '__module__', None)
-        if modname and modname != self.modname:
-            return False
-        return True
+        return not modname or modname == self.modname
 
     def format_args(self, **kwargs: Any) -> str:
         """Format the argument signature of *self.object*.
@@ -490,7 +484,7 @@ class Documenter:
         """
         if self.args is not None:
             # signature given explicitly
-            args = "(%s)" % self.args
+            args = f"({self.args})"
             retann = self.retann
         else:
             # try to introspect the signature
@@ -498,8 +492,7 @@ class Documenter:
                 retann = None
                 args = self._call_format_args(**kwargs)
                 if args:
-                    matched = re.match(r'^(\(.*\))\s+->\s+(.*)$', args)
-                    if matched:
+                    if matched := re.match(r'^(\(.*\))\s+->\s+(.*)$', args):
                         args = matched.group(1)
                         retann = matched.group(2)
             except Exception as exc:
@@ -507,16 +500,18 @@ class Documenter:
                                self.fullname, exc, type='autodoc')
                 args = None
 
-        result = self.env.events.emit_firstresult('autodoc-process-signature',
-                                                  self.objtype, self.fullname,
-                                                  self.object, self.options, args, retann)
-        if result:
+        if result := self.env.events.emit_firstresult(
+            'autodoc-process-signature',
+            self.objtype,
+            self.fullname,
+            self.object,
+            self.options,
+            args,
+            retann,
+        ):
             args, retann = result
 
-        if args is not None:
-            return args + ((' -> %s' % retann) if retann else '')
-        else:
-            return ''
+        return args + (f' -> {retann}' if retann else '') if args is not None else ''
 
     def add_directive_header(self, sig: str) -> None:
         """Add the directive header and options to the generated content."""
@@ -538,7 +533,7 @@ class Documenter:
         if self.objpath:
             # Be explicit about the module, this is necessary since .. class::
             # etc. don't support a prepended module name
-            self.add_line('   :module: %s' % self.modname, sourcename)
+            self.add_line(f'   :module: {self.modname}', sourcename)
 
     def get_doc(self) -> list[list[str]] | None:
         """Decode and return lines of the docstring(s) for the object.
@@ -546,9 +541,13 @@ class Documenter:
         When it returns None, autodoc-process-docstring will not be called for this
         object.
         """
-        docstring = getdoc(self.object, self.get_attr, self.config.autodoc_inherit_docstrings,
-                           self.parent, self.object_name)
-        if docstring:
+        if docstring := getdoc(
+            self.object,
+            self.get_attr,
+            self.config.autodoc_inherit_docstrings,
+            self.parent,
+            self.object_name,
+        ):
             tab_width = self.directive.state.document.settings.tab_width
             return [prepare_docstring(docstring, tab_width)]
         return []
@@ -580,7 +579,7 @@ class Documenter:
         if self.analyzer:
             return f'{self.analyzer.srcname}:docstring of {fullname}'
         else:
-            return 'docstring of %s' % fullname
+            return f'docstring of {fullname}'
 
     def add_content(self, more_content: StringList | None) -> None:
         """Add content from docstrings, attribute documentation and user."""
@@ -604,10 +603,7 @@ class Documenter:
         # add content from docstrings
         if docstring:
             docstrings = self.get_doc()
-            if docstrings is None:
-                # Do not call autodoc-process-docstring on get_doc() returns None.
-                pass
-            else:
+            if docstrings is not None:
                 if not docstrings:
                     # append at least a dummy docstring, so that the event
                     # autodoc-process-docstring is fired and can add some
@@ -668,11 +664,7 @@ class Documenter:
         # search for members in source code too
         namespace = '.'.join(self.objpath)  # will be empty for modules
 
-        if self.analyzer:
-            attr_docs = self.analyzer.find_attr_docs()
-        else:
-            attr_docs = {}
-
+        attr_docs = self.analyzer.find_attr_docs() if self.analyzer else {}
         # process members and determine which to skip
         for obj in members:
             try:
@@ -1038,19 +1030,15 @@ class ModuleDocumenter(Documenter):
 
         # add some module-specific options
         if self.options.synopsis:
-            self.add_line('   :synopsis: ' + self.options.synopsis, sourcename)
+            self.add_line(f'   :synopsis: {self.options.synopsis}', sourcename)
         if self.options.platform:
-            self.add_line('   :platform: ' + self.options.platform, sourcename)
+            self.add_line(f'   :platform: {self.options.platform}', sourcename)
         if self.options.deprecated:
             self.add_line('   :deprecated:', sourcename)
 
     def get_module_members(self) -> dict[str, ObjectMember]:
         """Get members of target module."""
-        if self.analyzer:
-            attr_docs = self.analyzer.attr_docs
-        else:
-            attr_docs = {}
-
+        attr_docs = self.analyzer.attr_docs if self.analyzer else {}
         members: dict[str, ObjectMember] = {}
         for name in dir(self.object):
             try:
@@ -1078,12 +1066,11 @@ class ModuleDocumenter(Documenter):
                 # for implicit module members, check __module__ to avoid
                 # documenting imported objects
                 return True, list(members.values())
-            else:
-                for member in members.values():
-                    if member.__name__ not in self.__all__:
-                        member.skipped = True
+            for member in members.values():
+                if member.__name__ not in self.__all__:
+                    member.skipped = True
 
-                return False, list(members.values())
+            return False, list(members.values())
         else:
             memberlist = self.options.members or []
             ret = []
@@ -1099,27 +1086,24 @@ class ModuleDocumenter(Documenter):
 
     def sort_members(self, documenters: list[tuple[Documenter, bool]],
                      order: str) -> list[tuple[Documenter, bool]]:
-        if order == 'bysource' and self.__all__:
-            assert self.__all__ is not None
-            module_all = self.__all__
-            module_all_set = set(module_all)
-            module_all_len = len(module_all)
+        if order != 'bysource' or not self.__all__:
+            return super().sort_members(documenters, order)
+        assert self.__all__ is not None
+        module_all = self.__all__
+        module_all_set = set(module_all)
+        module_all_len = len(module_all)
 
-            # Sort alphabetically first (for members not listed on the __all__)
-            documenters.sort(key=lambda e: e[0].name)
+        # Sort alphabetically first (for members not listed on the __all__)
+        documenters.sort(key=lambda e: e[0].name)
 
             # Sort by __all__
-            def keyfunc(entry: tuple[Documenter, bool]) -> int:
-                name = entry[0].name.split('::')[1]
-                if name in module_all_set:
-                    return module_all.index(name)
-                else:
-                    return module_all_len
-            documenters.sort(key=keyfunc)
+        def keyfunc(entry: tuple[Documenter, bool]) -> int:
+            name = entry[0].name.split('::')[1]
+            return module_all.index(name) if name in module_all_set else module_all_len
 
-            return documenters
-        else:
-            return super().sort_members(documenters, order)
+        documenters.sort(key=keyfunc)
+
+        return documenters
 
 
 class ModuleLevelDocumenter(Documenter):
@@ -1165,9 +1149,9 @@ class ClassLevelDocumenter(Documenter):
             # ... or from a class directive
             if mod_cls_ is None:
                 mod_cls_ = self.env.ref_context.get('py:class')
-                # ... if still None, there's no way to know
-                if mod_cls_ is None:
-                    return None, []
+            # ... if still None, there's no way to know
+            if mod_cls_ is None:
+                return None, []
             mod_cls = mod_cls_
         modname, sep, cls = mod_cls.rpartition('.')
         parents = [cls]
@@ -1255,10 +1239,7 @@ class DocstringSignatureMixin:
             if result is not None:
                 self.args, self.retann = result
         sig = super().format_signature(**kwargs)  # type: ignore[misc]
-        if self._signatures:
-            return "\n".join([sig] + self._signatures)
-        else:
-            return sig
+        return "\n".join([sig] + self._signatures) if self._signatures else sig
 
 
 class DocstringStripSignatureMixin(DocstringSignatureMixin):
@@ -1346,11 +1327,8 @@ class FunctionDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # typ
         if inspect.is_singledispatch_function(self.object):
             # append signature of singledispatch'ed functions
             for typ, func in self.object.registry.items():
-                if typ is object:
-                    pass  # default implementation. skipped.
-                else:
-                    dispatchfunc = self.annotate_to_first_argument(func, typ)
-                    if dispatchfunc:
+                if typ is not object:
+                    if dispatchfunc := self.annotate_to_first_argument(func, typ):
                         documenter = FunctionDocumenter(self.directive, '')
                         documenter.object = dispatchfunc
                         documenter.objpath = ['']
@@ -1421,10 +1399,7 @@ class DecoratorDocumenter(FunctionDocumenter):
 
     def format_args(self, **kwargs: Any) -> str:
         args = super().format_args(**kwargs)
-        if ',' in args:
-            return args
-        else:
-            return ''
+        return args if ',' in args else ''
 
 
 # Types which have confusing metaclass signatures it would be best not to show.
@@ -1698,7 +1673,7 @@ class ClassDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # type: 
         canonical_fullname = self.get_canonical_fullname()
         if (not self.doc_as_attr and not inspect.isNewType(self.object)
                 and canonical_fullname and self.fullname != canonical_fullname):
-            self.add_line('   :canonical: %s' % canonical_fullname, sourcename)
+            self.add_line(f'   :canonical: {canonical_fullname}', sourcename)
 
         # add inheritance info, if wanted
         if not self.doc_as_attr and self.options.show_inheritance:
@@ -1748,19 +1723,18 @@ class ClassDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # type: 
         if isinstance(self.object, TypeVar):
             if self.object.__doc__ == TypeVar.__doc__:
                 return []
-        if sys.version_info[:2] < (3, 10):
-            if inspect.isNewType(self.object) or isinstance(self.object, TypeVar):
+        if inspect.isNewType(self.object) or isinstance(self.object, TypeVar):
+            if sys.version_info[:2] < (3, 10):
                 parts = self.modname.strip('.').split('.')
                 orig_objpath = self.objpath
                 for i in range(len(parts)):
-                    new_modname = '.'.join(parts[:len(parts) - i])
                     new_objpath = parts[len(parts) - i:] + orig_objpath
+                    new_modname = '.'.join(parts[:len(parts) - i])
                     try:
                         analyzer = ModuleAnalyzer.for_module(new_modname)
                         analyzer.analyze()
                         key = ('', new_objpath[-1])
-                        comment = list(analyzer.attr_docs.get(key, []))
-                        if comment:
+                        if comment := list(analyzer.attr_docs.get(key, [])):
                             self.objpath = new_objpath
                             self.modname = new_modname
                             return [comment]
@@ -1768,11 +1742,7 @@ class ClassDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # type: 
                         pass
         if self.doc_as_attr:
             # Don't show the docstring of the class when it is an alias.
-            if self.get_variable_comment():
-                return []
-            else:
-                return None
-
+            return [] if self.get_variable_comment() else None
         lines = getattr(self, '_new_docstrings', None)
         if lines is not None:
             return lines
@@ -1780,8 +1750,7 @@ class ClassDocumenter(DocstringSignatureMixin, ModuleLevelDocumenter):  # type: 
         classdoc_from = self.options.get('class-doc-from', self.config.autoclass_content)
 
         docstrings = []
-        attrdocstring = getdoc(self.object, self.get_attr)
-        if attrdocstring:
+        if attrdocstring := getdoc(self.object, self.get_attr):
             docstrings.append(attrdocstring)
 
         # for classes, what the "docstring" is can be controlled via a
@@ -2005,10 +1974,7 @@ class UninitializedGlobalVariableMixin(DataDocumenterMixinBase):
                 super().should_suppress_value_header())
 
     def get_doc(self) -> list[list[str]] | None:
-        if self.object is UNINITIALIZED_ATTR:
-            return []
-        else:
-            return super().get_doc()  # type: ignore[misc]
+        return [] if self.object is UNINITIALIZED_ATTR else super().get_doc()
 
 
 class DataDocumenter(GenericAliasMixin,
@@ -2052,13 +2018,9 @@ class DataDocumenter(GenericAliasMixin,
     def should_suppress_value_header(self) -> bool:
         if super().should_suppress_value_header():
             return True
-        else:
-            doc = self.get_doc() or []
-            docstring, metadata = separate_metadata('\n'.join(sum(doc, [])))
-            if 'hide-value' in metadata:
-                return True
-
-        return False
+        doc = self.get_doc() or []
+        docstring, metadata = separate_metadata('\n'.join(sum(doc, [])))
+        return 'hide-value' in metadata
 
     def add_directive_header(self, sig: str) -> None:
         super().add_directive_header(sig)
@@ -2066,8 +2028,7 @@ class DataDocumenter(GenericAliasMixin,
         if self.options.annotation is SUPPRESS or self.should_suppress_directive_header():
             pass
         elif self.options.annotation:
-            self.add_line('   :annotation: %s' % self.options.annotation,
-                          sourcename)
+            self.add_line(f'   :annotation: {self.options.annotation}', sourcename)
         else:
             if self.config.autodoc_typehints != 'none':
                 # obtain annotation for this data
@@ -2080,15 +2041,16 @@ class DataDocumenter(GenericAliasMixin,
                     else:
                         objrepr = stringify_annotation(annotations.get(self.objpath[-1]),
                                                        "fully-qualified-except-typing")
-                    self.add_line('   :type: ' + objrepr, sourcename)
+                    self.add_line(f'   :type: {objrepr}', sourcename)
 
             try:
-                if (self.options.no_value or self.should_suppress_value_header() or
-                        ismock(self.object)):
-                    pass
-                else:
+                if (
+                    not self.options.no_value
+                    and not self.should_suppress_value_header()
+                    and not ismock(self.object)
+                ):
                     objrepr = object_description(self.object)
-                    self.add_line('   :value: ' + objrepr, sourcename)
+                    self.add_line(f'   :value: {objrepr}', sourcename)
             except ValueError:
                 pass
 
@@ -2112,9 +2074,7 @@ class DataDocumenter(GenericAliasMixin,
         return None
 
     def get_doc(self) -> list[list[str]] | None:
-        # Check the variable has a docstring-comment
-        comment = self.get_module_comment(self.objpath[-1])
-        if comment:
+        if comment := self.get_module_comment(self.objpath[-1]):
             return [comment]
         else:
             return super().get_doc()
@@ -2235,11 +2195,8 @@ class MethodDocumenter(DocstringSignatureMixin, ClassLevelDocumenter):  # type: 
         if inspect.is_singledispatch_method(meth):
             # append signature of singledispatch'ed functions
             for typ, func in meth.dispatcher.registry.items():
-                if typ is object:
-                    pass  # default implementation. skipped.
-                else:
-                    dispatchmeth = self.annotate_to_first_argument(func, typ)
-                    if dispatchmeth:
+                if typ is not object:
+                    if dispatchmeth := self.annotate_to_first_argument(func, typ):
                         documenter = MethodDocumenter(self.directive, '')
                         documenter.parent = self.parent
                         documenter.object = dispatchmeth
@@ -2323,11 +2280,10 @@ class MethodDocumenter(DocstringSignatureMixin, ClassLevelDocumenter):  # type: 
                 (docstring == object.__init__.__doc__ or  # for pypy
                  docstring.strip() == object.__init__.__doc__)):  # for !pypy
                 docstring = None
-            if docstring:
-                tab_width = self.directive.state.document.settings.tab_width
-                return [prepare_docstring(docstring, tabsize=tab_width)]
-            else:
+            if not docstring:
                 return []
+            tab_width = self.directive.state.document.settings.tab_width
+            return [prepare_docstring(docstring, tabsize=tab_width)]
         elif self.objpath[-1] == '__new__':
             docstring = getdoc(self.object, self.get_attr,
                                self.config.autodoc_inherit_docstrings,
@@ -2356,11 +2312,9 @@ class NonDataDescriptorMixin(DataDocumenterMixinBase):
 
     def import_object(self, raiseerror: bool = False) -> bool:
         ret = super().import_object(raiseerror)  # type: ignore[misc]
-        if ret and not inspect.isattributedescriptor(self.object):
-            self.non_data_descriptor = True
-        else:
-            self.non_data_descriptor = False
-
+        self.non_data_descriptor = bool(
+            ret and not inspect.isattributedescriptor(self.object)
+        )
         return ret
 
     def should_suppress_value_header(self) -> bool:
@@ -2405,20 +2359,19 @@ class SlotsMixin(DataDocumenterMixinBase):
             return super().should_suppress_value_header()
 
     def get_doc(self) -> list[list[str]] | None:
-        if self.object is SLOTSATTR:
-            try:
-                parent___slots__ = inspect.getslots(self.parent)
-                if parent___slots__ and parent___slots__.get(self.objpath[-1]):
-                    docstring = prepare_docstring(parent___slots__[self.objpath[-1]])
-                    return [docstring]
-                else:
-                    return []
-            except ValueError as exc:
-                logger.warning(__('Invalid __slots__ found on %s. Ignored.'),
-                               (self.parent.__qualname__, exc), type='autodoc')
-                return []
-        else:
+        if self.object is not SLOTSATTR:
             return super().get_doc()  # type: ignore[misc]
+        try:
+            parent___slots__ = inspect.getslots(self.parent)
+            if parent___slots__ and parent___slots__.get(self.objpath[-1]):
+                docstring = prepare_docstring(parent___slots__[self.objpath[-1]])
+                return [docstring]
+            else:
+                return []
+        except ValueError as exc:
+            logger.warning(__('Invalid __slots__ found on %s. Ignored.'),
+                           (self.parent.__qualname__, exc), type='autodoc')
+            return []
 
 
 class RuntimeInstanceAttributeMixin(DataDocumenterMixinBase):
@@ -2440,9 +2393,7 @@ class RuntimeInstanceAttributeMixin(DataDocumenterMixinBase):
         # An instance variable defined in __init__().
         if self.get_attribute_comment(parent, self.objpath[-1]):  # type: ignore[attr-defined]
             return True
-        if self.is_runtime_instance_attribute_not_commented(parent):
-            return True
-        return False
+        return bool(self.is_runtime_instance_attribute_not_commented(parent))
 
     def is_runtime_instance_attribute_not_commented(self, parent: Any) -> bool:
         """Check the subject is an attribute defined in __init__() without comment."""
@@ -2544,9 +2495,7 @@ class UninitializedInstanceAttributeMixin(DataDocumenterMixinBase):
                 super().should_suppress_value_header())
 
     def get_doc(self) -> list[list[str]] | None:
-        if self.object is UNINITIALIZED_ATTR:
-            return None
-        return super().get_doc()  # type: ignore[misc]
+        return None if self.object is UNINITIALIZED_ATTR else super().get_doc()
 
 
 class AttributeDocumenter(GenericAliasMixin, SlotsMixin,  # type: ignore[misc]
@@ -2577,9 +2526,7 @@ class AttributeDocumenter(GenericAliasMixin, SlotsMixin,  # type: ignore[misc]
             return False
         if inspect.isattributedescriptor(member):
             return True
-        if not inspect.isroutine(member) and not isinstance(member, type):
-            return True
-        return False
+        return not inspect.isroutine(member) and not isinstance(member, type)
 
     def document_members(self, all_members: bool = False) -> None:
         pass
@@ -2622,12 +2569,10 @@ class AttributeDocumenter(GenericAliasMixin, SlotsMixin,  # type: ignore[misc]
     def should_suppress_value_header(self) -> bool:
         if super().should_suppress_value_header():
             return True
-        else:
-            doc = self.get_doc()
-            if doc:
-                docstring, metadata = separate_metadata('\n'.join(sum(doc, [])))
-                if 'hide-value' in metadata:
-                    return True
+        if doc := self.get_doc():
+            docstring, metadata = separate_metadata('\n'.join(sum(doc, [])))
+            if 'hide-value' in metadata:
+                return True
 
         return False
 
@@ -2637,7 +2582,7 @@ class AttributeDocumenter(GenericAliasMixin, SlotsMixin,  # type: ignore[misc]
         if self.options.annotation is SUPPRESS or self.should_suppress_directive_header():
             pass
         elif self.options.annotation:
-            self.add_line('   :annotation: %s' % self.options.annotation, sourcename)
+            self.add_line(f'   :annotation: {self.options.annotation}', sourcename)
         else:
             if self.config.autodoc_typehints != 'none':
                 # obtain type annotation for this attribute
@@ -2650,15 +2595,16 @@ class AttributeDocumenter(GenericAliasMixin, SlotsMixin,  # type: ignore[misc]
                     else:
                         objrepr = stringify_annotation(annotations.get(self.objpath[-1]),
                                                        "fully-qualified-except-typing")
-                    self.add_line('   :type: ' + objrepr, sourcename)
+                    self.add_line(f'   :type: {objrepr}', sourcename)
 
             try:
-                if (self.options.no_value or self.should_suppress_value_header() or
-                        ismock(self.object)):
-                    pass
-                else:
+                if (
+                    not self.options.no_value
+                    and not self.should_suppress_value_header()
+                    and not ismock(self.object)
+                ):
                     objrepr = object_description(self.object)
-                    self.add_line('   :value: ' + objrepr, sourcename)
+                    self.add_line(f'   :value: {objrepr}', sourcename)
             except ValueError:
                 pass
 
@@ -2680,9 +2626,7 @@ class AttributeDocumenter(GenericAliasMixin, SlotsMixin,  # type: ignore[misc]
         return None
 
     def get_doc(self) -> list[list[str]] | None:
-        # Check the attribute has a docstring-comment
-        comment = self.get_attribute_comment(self.parent, self.objpath[-1])
-        if comment:
+        if comment := self.get_attribute_comment(self.parent, self.objpath[-1]):
             return [comment]
 
         try:
@@ -2723,10 +2667,9 @@ class PropertyDocumenter(DocstringStripSignatureMixin,  # type: ignore[misc]
         if isinstance(parent, ClassDocumenter):
             if inspect.isproperty(member):
                 return True
-            else:
-                __dict__ = safe_getattr(parent.object, '__dict__', {})
-                obj = __dict__.get(membername)
-                return isinstance(obj, classmethod) and inspect.isproperty(obj.__func__)
+            __dict__ = safe_getattr(parent.object, '__dict__', {})
+            obj = __dict__.get(membername)
+            return isinstance(obj, classmethod) and inspect.isproperty(obj.__func__)
         else:
             return False
 
@@ -2785,20 +2728,17 @@ class PropertyDocumenter(DocstringStripSignatureMixin,  # type: ignore[misc]
                 else:
                     objrepr = stringify_annotation(signature.return_annotation,
                                                    "fully-qualified-except-typing")
-                self.add_line('   :type: ' + objrepr, sourcename)
+                self.add_line(f'   :type: {objrepr}', sourcename)
         except TypeError as exc:
             logger.warning(__("Failed to get a function signature for %s: %s"),
                            self.fullname, exc)
-            pass
         except ValueError:
             pass
 
     def _get_property_getter(self):
         if safe_getattr(self.object, 'fget', None):  # property
             return self.object.fget
-        if safe_getattr(self.object, 'func', None):  # cached_property
-            return self.object.func
-        return None
+        return self.object.func if safe_getattr(self.object, 'func', None) else None
 
 
 def autodoc_attrgetter(app: Sphinx, obj: Any, name: str, *defargs: Any) -> Any:

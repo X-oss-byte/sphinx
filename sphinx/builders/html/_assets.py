@@ -141,6 +141,4 @@ def _file_checksum(outdir: Path, filename: str | os.PathLike[str]) -> str:
         content = outdir.joinpath(filename).read_bytes().translate(None, b'\r')
     except FileNotFoundError:
         return ''
-    if not content:
-        return ''
-    return f'{zlib.crc32(content):08x}'
+    return '' if not content else f'{zlib.crc32(content):08x}'

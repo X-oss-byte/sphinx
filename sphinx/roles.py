@@ -84,15 +84,12 @@ class XRefRole(ReferenceRole):
 
     def update_title_and_target(self, title: str, target: str) -> tuple[str, str]:
         if not self.has_explicit_title:
-            if title.endswith('()'):
-                # remove parentheses
-                title = title[:-2]
+            title = title.removesuffix('()')
             if self.config.add_function_parentheses:
                 # add them back to all occurrences if configured
                 title += '()'
         # remove parentheses from the target too
-        if target.endswith('()'):
-            target = target[:-2]
+        target = target.removesuffix('()')
         return title, target
 
     def run(self) -> tuple[list[Node], list[system_message]]:
@@ -174,7 +171,7 @@ class AnyXRefRole(XRefRole):
 
 class PEP(ReferenceRole):
     def run(self) -> tuple[list[Node], list[system_message]]:
-        target_id = 'index-%s' % self.env.new_serialno('index')
+        target_id = f"index-{self.env.new_serialno('index')}"
         entries = [('single', _('Python Enhancement Proposals; PEP %s') % self.target,
                     target_id, '', None)]
 
@@ -188,7 +185,7 @@ class PEP(ReferenceRole):
             if self.has_explicit_title:
                 reference += nodes.strong(self.title, self.title)
             else:
-                title = "PEP " + self.title
+                title = f"PEP {self.title}"
                 reference += nodes.strong(title, title)
         except ValueError:
             msg = self.inliner.reporter.error(__('invalid PEP number %s') % self.target,
@@ -209,8 +206,8 @@ class PEP(ReferenceRole):
 
 class RFC(ReferenceRole):
     def run(self) -> tuple[list[Node], list[system_message]]:
-        target_id = 'index-%s' % self.env.new_serialno('index')
-        entries = [('single', 'RFC; RFC %s' % self.target, target_id, '', None)]
+        target_id = f"index-{self.env.new_serialno('index')}"
+        entries = [('single', f'RFC; RFC {self.target}', target_id, '', None)]
 
         index = addnodes.index(entries=entries)
         target = nodes.target('', '', ids=[target_id])
@@ -222,7 +219,7 @@ class RFC(ReferenceRole):
             if self.has_explicit_title:
                 reference += nodes.strong(self.title, self.title)
             else:
-                title = "RFC " + self.title
+                title = f"RFC {self.title}"
                 reference += nodes.strong(title, title)
         except ValueError:
             msg = self.inliner.reporter.error(__('invalid RFC number %s') % self.target,
@@ -332,8 +329,7 @@ class Abbreviation(SphinxRole):
 
     def run(self) -> tuple[list[Node], list[system_message]]:
         options = self.options.copy()
-        matched = self.abbr_re.search(self.text)
-        if matched:
+        if matched := self.abbr_re.search(self.text):
             text = self.text[:matched.start()].strip()
             options['explanation'] = matched.group(1)
         else:

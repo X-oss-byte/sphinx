@@ -1,5 +1,6 @@
 """Quickly setup documentation source to work with Sphinx."""
 
+
 from __future__ import annotations
 
 import argparse
@@ -70,23 +71,18 @@ DEFAULTS = {
 
 PROMPT_PREFIX = '> '
 
-if sys.platform == 'win32':
-    # On Windows, show questions as bold because of color scheme of PowerShell (refs: #5294).
-    COLOR_QUESTION = 'bold'
-else:
-    COLOR_QUESTION = 'purple'
+COLOR_QUESTION = 'bold' if sys.platform == 'win32' else 'purple'
 
 
 # function to get input from terminal -- overridden by the test suite
 def term_input(prompt: str) -> str:
-    if sys.platform == 'win32':
-        # Important: On windows, readline is not enabled by default.  In these
-        #            environment, escape sequences have been broken.  To avoid the
-        #            problem, quickstart uses ``print()`` to show prompt.
-        print(prompt, end='')
-        return input('')
-    else:
+    if sys.platform != 'win32':
         return input(prompt)
+    # Important: On windows, readline is not enabled by default.  In these
+    #            environment, escape sequences have been broken.  To avoid the
+    #            problem, quickstart uses ``print()`` to show prompt.
+    print(prompt, end='')
+    return input('')
 
 
 class ValidationError(Exception):
@@ -101,9 +97,7 @@ def is_path(x: str) -> str:
 
 
 def is_path_or_empty(x: str) -> str:
-    if x == '':
-        return x
-    return is_path(x)
+    return x if not x else is_path(x)
 
 
 def allow_empty(x: str) -> str:
@@ -125,13 +119,14 @@ def choice(*l: str) -> Callable[[str], str]:
 
 
 def boolean(x: str) -> bool:
-    if x.upper() not in ('Y', 'YES', 'N', 'NO'):
+    if x.upper() in {'Y', 'YES', 'N', 'NO'}:
+        return x.upper() in {'Y', 'YES'}
+    else:
         raise ValidationError(__("Please enter either 'y' or 'n'."))
-    return x.upper() in ('Y', 'YES')
 
 
 def suffix(x: str) -> str:
-    if not (x[0:1] == '.' and len(x) > 1):
+    if not (x.startswith('.') and len(x) > 1):
         raise ValidationError(__("Please enter a file suffix, e.g. '.rst' or '.txt'."))
     return x
 
@@ -145,7 +140,7 @@ def do_prompt(
 ) -> str | bool:
     while True:
         if default is not None:
-            prompt = PROMPT_PREFIX + f'{text} [{default}]: '
+            prompt = f'{PROMPT_PREFIX}{text} [{default}]: '
         else:
             prompt = PROMPT_PREFIX + text + ': '
         if USE_LIBEDIT:
@@ -164,7 +159,7 @@ def do_prompt(
         try:
             x = validator(x)
         except ValidationError as err:
-            print(red('* ' + str(err)))
+            print(red(f'* {str(err)}'))
             continue
         break
     return x
@@ -185,11 +180,10 @@ class QuickstartRenderer(SphinxRenderer):
         return bool(self.templatedir) and path.exists(template)
 
     def render(self, template_name: str, context: dict[str, Any]) -> str:
-        if self._has_custom_template(template_name):
-            custom_template = path.join(self.templatedir, path.basename(template_name))
-            return self.render_from_file(custom_template, context)
-        else:
+        if not self._has_custom_template(template_name):
             return super().render(template_name, context)
+        custom_template = path.join(self.templatedir, path.basename(template_name))
+        return self.render_from_file(custom_template, context)
 
 
 def ask_user(d: dict[str, Any]) -> None:
@@ -312,7 +306,7 @@ def ask_user(d: dict[str, Any]) -> None:
         d['extensions'] = []
         for name, description in EXTENSIONS.items():
             if do_prompt(f'{name}: {description} (y/n)', 'n', boolean):
-                d['extensions'].append('sphinx.ext.%s' % name)
+                d['extensions'].append(f'sphinx.ext.{name}')
 
         # Handle conflicting options
         if {'sphinx.ext.imgmath', 'sphinx.ext.mathjax'}.issubset(d['extensions']):
@@ -457,10 +451,7 @@ def valid_dir(d: dict) -> bool:
         d['dot'] + 'templates',
         d['master'] + d['suffix'],
     ]
-    if set(reserved_names) & set(os.listdir(dir)):
-        return False
-
-    return True
+    return not set(reserved_names) & set(os.listdir(dir))
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -514,9 +505,13 @@ def get_parser() -> argparse.ArgumentParser:
 
     group = parser.add_argument_group(__('Extension options'))
     for ext in EXTENSIONS:
-        group.add_argument('--ext-%s' % ext, action='append_const',
-                           const='sphinx.ext.%s' % ext, dest='extensions',
-                           help=__('enable %s extension') % ext)
+        group.add_argument(
+            f'--ext-{ext}',
+            action='append_const',
+            const=f'sphinx.ext.{ext}',
+            dest='extensions',
+            help=__('enable %s extension') % ext,
+        )
     group.add_argument('--extensions', metavar='EXTENSIONS', dest='extensions',
                        action='append', help=__('enable arbitrary extensions'))
 
