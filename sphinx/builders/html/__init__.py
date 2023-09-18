@@ -93,10 +93,7 @@ def convert_locale_to_language_tag(locale: str | None) -> str | None:
 
     refs: BCP 47 (:rfc:`5646`)
     """
-    if locale:
-        return locale.replace('_', '-')
-    else:
-        return None
+    return locale.replace('_', '-') if locale else None
 
 
 class BuildInfo:
@@ -240,15 +237,12 @@ class StandaloneHTMLBuilder(Builder):
         candidates = [path.join(dir, self.config.language,
                                 'LC_MESSAGES', 'sphinx.js')
                       for dir in self.config.locale_dirs] + \
-                     [path.join(package_dir, 'locale', self.config.language,
+                         [path.join(package_dir, 'locale', self.config.language,
                                 'LC_MESSAGES', 'sphinx.js'),
                       path.join(sys.prefix, 'share/sphinx/locale',
                                 self.config.language, 'sphinx.js')]
 
-        for jsfile in candidates:
-            if path.isfile(jsfile):
-                return jsfile
-        return ''
+        return next((jsfile for jsfile in candidates if path.isfile(jsfile)), '')
 
     def _get_style_filenames(self) -> Iterator[str]:
         if isinstance(self.config.html_style, str):
@@ -358,19 +352,18 @@ class StandaloneHTMLBuilder(Builder):
         if name is not None:
             # use given name
             return name
+        # not given: choose a math_renderer from registered ones as possible
+        renderers = list(self.app.registry.html_inline_math_renderers)
+        if len(renderers) == 1:
+            # only default math_renderer (mathjax) is registered
+            return renderers[0]
+        elif len(renderers) == 2:
+            # default and another math_renderer are registered; prior the another
+            renderers.remove('mathjax')
+            return renderers[0]
         else:
-            # not given: choose a math_renderer from registered ones as possible
-            renderers = list(self.app.registry.html_inline_math_renderers)
-            if len(renderers) == 1:
-                # only default math_renderer (mathjax) is registered
-                return renderers[0]
-            elif len(renderers) == 2:
-                # default and another math_renderer are registered; prior the another
-                renderers.remove('mathjax')
-                return renderers[0]
-            else:
-                # many math_renderers are registered. can't choose automatically!
-                return None
+            # many math_renderers are registered. can't choose automatically!
+            return None
 
     def get_outdated_docs(self) -> Iterator[str]:
         try:
@@ -401,7 +394,7 @@ class StandaloneHTMLBuilder(Builder):
                 targetmtime = path.getmtime(targetname)
             except Exception:
                 targetmtime = 0
-            try:
+            with contextlib.suppress(OSError):
                 srcmtime = max(path.getmtime(self.env.doc2path(docname)), template_mtime)
                 if srcmtime > targetmtime:
                     logger.debug(
@@ -413,9 +406,6 @@ class StandaloneHTMLBuilder(Builder):
                         _format_modified_time(path.getmtime(self.env.doc2path(docname))),
                     )
                     yield docname
-            except OSError:
-                # source doesn't exist anymore
-                pass
 
     def get_asset_paths(self) -> list[str]:
         return self.config.html_extra_path + self.config.html_static_path
@@ -455,9 +445,7 @@ class StandaloneHTMLBuilder(Builder):
 
         # determine the additional indices to include
         self.domain_indices = []
-        # html_domain_indices can be False/True or a list of index names
-        indices_config = self.config.html_domain_indices
-        if indices_config:
+        if indices_config := self.config.html_domain_indices:
             for domain_name in sorted(self.env.domains):
                 domain: Domain = self.env.domains[domain_name]
                 for indexcls in domain.indices:
@@ -495,12 +483,11 @@ class StandaloneHTMLBuilder(Builder):
         rellinks: list[tuple[str, str, str, str]] = []
         if self.use_index:
             rellinks.append(('genindex', _('General Index'), 'I', _('index')))
-        for indexname, indexcls, _content, _collapse in self.domain_indices:
-            # if it has a short name
-            if indexcls.shortname:
-                rellinks.append((indexname, indexcls.localname,
-                                 '', indexcls.shortname))
-
+        rellinks.extend(
+            (indexname, indexcls.localname, '', indexcls.shortname)
+            for indexname, indexcls, _content, _collapse in self.domain_indices
+            if indexcls.shortname
+        )
         # add assets registered after ``Builder.init()``.
         for css_filename, attrs in self.app.registry.css_files:
             self.add_css_file(css_filename, **attrs)
@@ -547,9 +534,12 @@ class StandaloneHTMLBuilder(Builder):
             'html5_doctype': True,
         }
         if self.theme:
-            self.globalcontext.update(
-                ('theme_' + key, val) for (key, val) in
-                self.theme.get_options(self.theme_options).items())
+            self.globalcontext |= (
+                (f'theme_{key}', val)
+                for (key, val) in self.theme.get_options(
+                    self.theme_options
+                ).items()
+            )
         self.globalcontext.update(self.config.html_context)
 
     def get_doc_context(self, docname: str, body: str, metatags: str) -> dict[str, Any]:
@@ -690,7 +680,7 @@ class StandaloneHTMLBuilder(Builder):
     def gen_additional_pages(self) -> None:
         # additional pages from conf.py
         for pagename, template in self.config.html_additional_pages.items():
-            logger.info(pagename + ' ', nonl=True)
+            logger.info(f'{pagename} ', nonl=True)
             self.handle_page(pagename, {}, template)
 
         # the search page
@@ -708,11 +698,10 @@ class StandaloneHTMLBuilder(Builder):
         # the total count of lines for each index letter, used to distribute
         # the entries into two columns
         genindex = IndexEntries(self.env).create_index(self)
-        indexcounts = []
-        for _k, entries in genindex:
-            indexcounts.append(sum(1 + len(subitems)
-                                   for _, (_, subitems, _) in entries))
-
+        indexcounts = [
+            sum(1 + len(subitems) for _, (_, subitems, _) in entries)
+            for _k, entries in genindex
+        ]
         genindexcontext = {
             'genindexentries': genindex,
             'genindexcounts': indexcounts,
@@ -728,8 +717,7 @@ class StandaloneHTMLBuilder(Builder):
             for (key, entries), count in zip(genindex, indexcounts):
                 ctx = {'key': key, 'entries': entries, 'count': count,
                        'genindexentries': genindex}
-                self.handle_page('genindex-' + key, ctx,
-                                 'genindex-single.html')
+                self.handle_page(f'genindex-{key}', ctx, 'genindex-single.html')
         else:
             self.handle_page('genindex', genindexcontext, 'genindex.html')
 
@@ -740,7 +728,7 @@ class StandaloneHTMLBuilder(Builder):
                 'content': content,
                 'collapse_index': collapse,
             }
-            logger.info(indexname + ' ', nonl=True)
+            logger.info(f'{indexname} ', nonl=True)
             self.handle_page(indexname, indexcontext, 'domainindex.html')
 
     def copy_image_files(self) -> None:
@@ -789,8 +777,7 @@ class StandaloneHTMLBuilder(Builder):
 
     def copy_translation_js(self) -> None:
         """Copy a JavaScript file for translations."""
-        jsfile = self._get_translations_js()
-        if jsfile:
+        if jsfile := self._get_translations_js():
             copyfile(jsfile, path.join(self.outdir, '_static', 'translations.js'))
 
     def copy_stemmer_js(self) -> None:
@@ -799,10 +786,9 @@ class StandaloneHTMLBuilder(Builder):
             if hasattr(self.indexer, 'get_js_stemmer_rawcodes'):
                 for jsfile in self.indexer.get_js_stemmer_rawcodes():
                     copyfile(jsfile, path.join(self.outdir, '_static', path.basename(jsfile)))
-            else:
-                if js_stemmer_rawcode := self.indexer.get_js_stemmer_rawcode():
-                    copyfile(js_stemmer_rawcode,
-                             path.join(self.outdir, '_static', '_stemmer.js'))
+            elif js_stemmer_rawcode := self.indexer.get_js_stemmer_rawcode():
+                copyfile(js_stemmer_rawcode,
+                         path.join(self.outdir, '_static', '_stemmer.js'))
 
     def copy_theme_static_files(self, context: dict[str, Any]) -> None:
         def onerror(filename: str, error: Exception) -> None:
@@ -888,7 +874,7 @@ class StandaloneHTMLBuilder(Builder):
 
         if self.config.html_scaled_image_link and self.html_scaled_image_link:
             for node in doctree.findall(nodes.image):
-                if not any((key in node) for key in ['scale', 'width', 'height']):
+                if all(key not in node for key in ['scale', 'width', 'height']):
                     # resizing options are not given. scaled image link is available
                     # only for resized images.
                     continue
@@ -1033,6 +1019,7 @@ class StandaloneHTMLBuilder(Builder):
             if uri == '#' and not self.allow_sharp_as_current_path:
                 uri = baseuri
             return uri
+
         ctx['pathto'] = pathto
 
         def hasdoc(name: str) -> bool:
@@ -1040,9 +1027,10 @@ class StandaloneHTMLBuilder(Builder):
                 return True
             if name == 'search' and self.search:
                 return True
-            if name == 'genindex' and self.get_builder_config('use_index', 'html'):
-                return True
-            return False
+            return bool(
+                name == 'genindex' and self.get_builder_config('use_index', 'html')
+            )
+
         ctx['hasdoc'] = hasdoc
 
         ctx['toctree'] = lambda **kwargs: self._get_local_toctree(pagename, **kwargs)
@@ -1110,16 +1098,9 @@ class StandaloneHTMLBuilder(Builder):
             templatename = newtmpl
 
         # sort JS/CSS before rendering HTML
-        try:  # NoQA: SIM105
+        with contextlib.suppress(AttributeError):
             # Convert script_files to list to support non-list script_files (refs: #8889)
             ctx['script_files'] = sorted(ctx['script_files'], key=lambda js: js.priority)
-        except AttributeError:
-            # Skip sorting if users modifies script_files directly (maybe via `html_context`).
-            # refs: #8885
-            #
-            # Note: priority sorting feature will not work in this case.
-            pass
-
         with contextlib.suppress(AttributeError):
             ctx['css_files'] = sorted(ctx['css_files'], key=lambda css: css.priority)
 
@@ -1173,12 +1154,12 @@ class StandaloneHTMLBuilder(Builder):
             # first write to a temporary file, so that if dumping fails,
             # the existing index won't be overwritten
             if self.indexer_dumps_unicode:
-                with open(searchindexfn + '.tmp', 'w', encoding='utf-8') as ft:
+                with open(f'{searchindexfn}.tmp', 'w', encoding='utf-8') as ft:
                     self.indexer.dump(ft, self.indexer_format)
             else:
-                with open(searchindexfn + '.tmp', 'wb') as fb:
+                with open(f'{searchindexfn}.tmp', 'wb') as fb:
                     self.indexer.dump(fb, self.indexer_format)
-            os.replace(searchindexfn + '.tmp', searchindexfn)
+            os.replace(f'{searchindexfn}.tmp', searchindexfn)
 
 
 def convert_html_css_files(app: Sphinx, config: Config) -> None:
@@ -1229,12 +1210,12 @@ def setup_resource_paths(app: Sphinx, pagename: str, templatename: str,
     # favicon_url
     favicon_url = context.get('favicon_url')
     if favicon_url and not isurl(favicon_url):
-        context['favicon_url'] = pathto('_static/' + favicon_url, resource=True)
+        context['favicon_url'] = pathto(f'_static/{favicon_url}', resource=True)
 
     # logo_url
     logo_url = context.get('logo_url')
     if logo_url and not isurl(logo_url):
-        context['logo_url'] = pathto('_static/' + logo_url, resource=True)
+        context['logo_url'] = pathto(f'_static/{logo_url}', resource=True)
 
 
 def validate_math_renderer(app: Sphinx) -> None:

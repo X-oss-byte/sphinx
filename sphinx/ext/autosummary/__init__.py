@@ -193,14 +193,16 @@ def get_documenter(app: Sphinx, obj: Any, parent: Any) -> type[Documenter]:
     else:
         parent_doc = parent_doc_cls(FakeDirective(), "")
 
-    # Get the correct documenter class for *obj*
-    classes = [cls for cls in app.registry.documenters.values()
-               if cls.can_document_member(obj, '', False, parent_doc)]
-    if classes:
-        classes.sort(key=lambda cls: cls.priority)
-        return classes[-1]
-    else:
+    if not (
+        classes := [
+            cls
+            for cls in app.registry.documenters.values()
+            if cls.can_document_member(obj, '', False, parent_doc)
+        ]
+    ):
         return DataDocumenter
+    classes.sort(key=lambda cls: cls.priority)
+    return classes[-1]
 
 
 # -- .. autosummary:: ----------------------------------------------------------
@@ -329,7 +331,7 @@ class Autosummary(SphinxDirective):
             if not isinstance(obj, ModuleType):
                 # give explicitly separated module name, so that members
                 # of inner classes can be documented
-                full_name = modname + '::' + full_name[len(modname) + 1:]
+                full_name = f'{modname}::{full_name[len(modname) + 1:]}'
             # NB. using full_name here is important, since Documenters
             #     handle module prefixes slightly differently
             documenter = self.create_documenter(self.env.app, obj, parent, full_name)
@@ -510,7 +512,7 @@ def mangle_signature(sig: str, max_chars: int = 30) -> str:
             sig += "[, %s]" % limited_join(", ", opts,
                                            max_chars=max_chars - len(sig) - 4 - 2)
 
-    return "(%s)" % sig
+    return f"({sig})"
 
 
 def extract_summary(doc: list[str], document: Any) -> str:
@@ -619,10 +621,9 @@ def get_import_prefixes_from_env(env: BuildEnvironment) -> list[str | None]:
     if currmodule:
         prefixes.insert(0, currmodule)
 
-    currclass = env.ref_context.get('py:class')
-    if currclass:
+    if currclass := env.ref_context.get('py:class'):
         if currmodule:
-            prefixes.insert(0, currmodule + "." + currclass)
+            prefixes.insert(0, f"{currmodule}.{currclass}")
         else:
             prefixes.insert(0, currclass)
 
@@ -639,10 +640,7 @@ def import_by_name(
     errors: list[ImportExceptionGroup] = []
     for prefix in prefixes:
         try:
-            if prefix:
-                prefixed_name = '.'.join([prefix, name])
-            else:
-                prefixed_name = name
+            prefixed_name = '.'.join([prefix, name]) if prefix else name
             obj, parent, modname = _import_by_name(prefixed_name, grouped_exception=True)
             return prefixed_name, obj, parent, modname
         except ImportError:
@@ -652,7 +650,7 @@ def import_by_name(
             errors.append(exc)
 
     exceptions: list[BaseException] = sum((e.exceptions for e in errors), [])
-    raise ImportExceptionGroup('no module named %s' % ' or '.join(tried), exceptions)
+    raise ImportExceptionGroup(f"no module named {' or '.join(tried)}", exceptions)
 
 
 def _import_by_name(name: str, grouped_exception: bool = True) -> tuple[Any, Any, str]:
@@ -685,15 +683,14 @@ def _import_by_name(name: str, grouped_exception: bool = True) -> tuple[Any, Any
             if modname in sys.modules:
                 break
 
-        if last_j < len(name_parts):
-            parent = None
-            obj = sys.modules[modname]
-            for obj_name in name_parts[last_j:]:
-                parent = obj
-                obj = getattr(obj, obj_name)
-            return obj, parent, modname
-        else:
+        if last_j >= len(name_parts):
             return sys.modules[modname], None, modname
+        parent = None
+        obj = sys.modules[modname]
+        for obj_name in name_parts[last_j:]:
+            parent = obj
+            obj = getattr(obj, obj_name)
+        return obj, parent, modname
     except (ValueError, ImportError, AttributeError, KeyError) as exc:
         errors.append(exc)
         if grouped_exception:
@@ -725,7 +722,7 @@ def import_ivar_by_name(name: str, prefixes: Sequence[str | None] = (None,),
             found_attrs |= {attr for (qualname, attr) in analyzer.attr_docs}
             found_attrs |= {attr for (qualname, attr) in analyzer.annotations}
             if attr in found_attrs:
-                return real_name + "." + attr, INSTANCEATTR, obj, modname
+                return f"{real_name}.{attr}", INSTANCEATTR, obj, modname
     except (ImportError, ValueError, PycodeError) as exc:
         raise ImportError from exc
     except ImportExceptionGroup:
@@ -786,9 +783,7 @@ def process_generate_options(app: Sphinx) -> None:
         env = app.builder.env
         genfiles = [env.doc2path(x, base=False) for x in env.found_docs
                     if os.path.isfile(env.doc2path(x))]
-    elif genfiles is False:
-        pass
-    else:
+    elif genfiles is not False:
         ext = list(app.config.source_suffix)
         genfiles = [genfile + (ext[0] if not genfile.endswith(tuple(ext)) else '')
                     for genfile in genfiles]

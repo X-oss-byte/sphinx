@@ -46,7 +46,7 @@ class SphinxBaseReader(standalone.Reader):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         from sphinx.application import Sphinx
-        if len(args) > 0 and isinstance(args[0], Sphinx):
+        if args and isinstance(args[0], Sphinx):
             self._app = args[0]
             self._env = self._app.env
             args = args[1:]

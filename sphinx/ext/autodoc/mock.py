@@ -69,11 +69,13 @@ class _MockObject:
 
 def _make_subclass(name: str, module: str, superclass: Any = _MockObject,
                    attributes: Any = None, decorator_args: tuple = ()) -> Any:
-    attrs = {'__module__': module,
-             '__display_name__': module + '.' + name,
-             '__name__': name,
-             '__sphinx_decorator_args__': decorator_args}
-    attrs.update(attributes or {})
+    attrs = {
+        '__module__': module,
+        '__display_name__': f'{module}.{name}',
+        '__name__': name,
+        '__sphinx_decorator_args__': decorator_args,
+    }
+    attrs |= (attributes or {})
 
     return type(name, (superclass,), attrs)
 
@@ -121,12 +123,14 @@ class MockFinder(MetaPathFinder):
 
     def find_spec(self, fullname: str, path: Sequence[bytes | str] | None,
                   target: ModuleType | None = None) -> ModuleSpec | None:
-        for modname in self.modnames:
-            # check if fullname is (or is a descendant of) one of our targets
-            if modname == fullname or fullname.startswith(modname + '.'):
-                return ModuleSpec(fullname, self.loader)
-
-        return None
+        return next(
+            (
+                ModuleSpec(fullname, self.loader)
+                for modname in self.modnames
+                if modname == fullname or fullname.startswith(f'{modname}.')
+            ),
+            None,
+        )
 
     def invalidate_caches(self) -> None:
         """Invalidate mocked modules on sys.modules."""
@@ -175,15 +179,12 @@ def ismock(subject: Any) -> bool:
     else:
         tmp_subject = subject
 
-    try:
+    with contextlib.suppress(AttributeError):
         # check the object is mocked object
         __mro__ = safe_getattr(type(tmp_subject), '__mro__', [])
         if len(__mro__) > 2 and __mro__[-2] is _MockObject:
             # A mocked object has a MRO that ends with (..., _MockObject, object).
             return True
-    except AttributeError:
-        pass
-
     return False
 
 

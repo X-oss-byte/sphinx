@@ -350,9 +350,9 @@ class SphinxComponentRegistry:
             handlers = self.translation_handlers.get(builder.format, {})
 
         for name, (visit, depart) in handlers.items():
-            setattr(translator, 'visit_' + name, MethodType(visit, translator))
+            setattr(translator, f'visit_{name}', MethodType(visit, translator))
             if depart:
-                setattr(translator, 'depart_' + name, MethodType(depart, translator))
+                setattr(translator, f'depart_{name}', MethodType(depart, translator))
 
         return translator
 

@@ -103,15 +103,17 @@ class ChangesBuilder(Builder):
         with open(path.join(self.outdir, 'changes.html'), 'w', encoding='utf8') as f:
             f.write(self.templates.render('changes/versionchanges.html', ctx))
 
-        hltext = ['.. versionadded:: %s' % version,
-                  '.. versionchanged:: %s' % version,
-                  '.. deprecated:: %s' % version]
+        hltext = [
+            f'.. versionadded:: {version}',
+            f'.. versionchanged:: {version}',
+            f'.. deprecated:: {version}',
+        ]
 
         def hl(no: int, line: str) -> str:
-            line = '<a name="L%s"> </a>' % no + html.escape(line)
+            line = f'<a name="L{no}"> </a>{html.escape(line)}'
             for x in hltext:
                 if x in line:
-                    line = '<span class="hl">%s</span>' % line
+                    line = f'<span class="hl">{line}</span>'
                     break
             return line
 
@@ -133,8 +135,10 @@ class ChangesBuilder(Builder):
                     'text': text,
                 }
                 f.write(self.templates.render('changes/rstsource.html', ctx))
-        themectx = {'theme_' + key: val for (key, val) in
-                    self.theme.get_options({}).items()}
+        themectx = {
+            f'theme_{key}': val
+            for (key, val) in self.theme.get_options({}).items()
+        }
         copy_asset_file(path.join(package_dir, 'themes', 'default', 'static', 'default.css_t'),
                         self.outdir, context=themectx, renderer=self.templates)
         copy_asset_file(path.join(package_dir, 'themes', 'basic', 'static', 'basic.css'),

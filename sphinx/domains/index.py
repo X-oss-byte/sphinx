@@ -77,7 +77,7 @@ class IndexDirective(SphinxDirective):
             targetname = self.options['name']
             targetnode = nodes.target('', '', names=[targetname])
         else:
-            targetid = 'index-%s' % self.env.new_serialno('index')
+            targetid = f"index-{self.env.new_serialno('index')}"
             targetnode = nodes.target('', '', ids=[targetid])
 
         self.state.document.note_explicit_target(targetnode)
@@ -92,19 +92,17 @@ class IndexDirective(SphinxDirective):
 
 class IndexRole(ReferenceRole):
     def run(self) -> tuple[list[Node], list[system_message]]:
-        target_id = 'index-%s' % self.env.new_serialno('index')
+        target_id = f"index-{self.env.new_serialno('index')}"
         if self.has_explicit_title:
             # if an explicit target is given, process it as a full entry
             title = self.title
             entries = process_index_entry(self.target, target_id)
+        elif self.target.startswith('!'):
+            title = self.title[1:]
+            entries = [('single', self.target[1:], target_id, 'main', None)]
         else:
-            # otherwise we just create a single entry
-            if self.target.startswith('!'):
-                title = self.title[1:]
-                entries = [('single', self.target[1:], target_id, 'main', None)]
-            else:
-                title = self.title
-                entries = [('single', self.target, target_id, '', None)]
+            title = self.title
+            entries = [('single', self.target, target_id, '', None)]
 
         index = addnodes.index(entries=entries)
         target = nodes.target('', '', ids=[target_id])

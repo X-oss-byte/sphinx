@@ -169,7 +169,7 @@ class MathDirective(SphinxDirective):
         node['number'] = domain.get_equation_number_for(node['label'])
 
         # add target node
-        node_id = make_id('equation-%s' % node['label'])
+        node_id = make_id(f"equation-{node['label']}")
         target = nodes.target('', '', ids=[node_id])
         self.state.document.note_explicit_target(target)
         ret.insert(0, target)

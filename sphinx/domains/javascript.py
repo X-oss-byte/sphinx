@@ -68,7 +68,7 @@ class JSObject(ObjectDescription[tuple[str, str]]):
         directives.
         """
         sig = sig.strip()
-        if '(' in sig and sig[-1:] == ')':
+        if '(' in sig and sig.endswith(')'):
             member, arglist = sig.split('(', 1)
             member = member.strip()
             arglist = arglist[:-1].strip()
@@ -107,8 +107,7 @@ class JSObject(ObjectDescription[tuple[str, str]]):
             and (len(sig) > max_len > 0)
         )
 
-        display_prefix = self.get_display_prefix()
-        if display_prefix:
+        if display_prefix := self.get_display_prefix():
             signode += addnodes.desc_annotation('', '', *display_prefix)
 
         actual_prefix = None
@@ -124,10 +123,10 @@ class JSObject(ObjectDescription[tuple[str, str]]):
             signode += addName
         signode += addnodes.desc_name('', '', addnodes.desc_sig_name(name, name))
         if self.has_arguments:
-            if not arglist:
-                signode += addnodes.desc_parameterlist()
-            else:
+            if arglist:
                 _pseudo_parse_arglist(signode, arglist, multi_line_parameter_list)
+            else:
+                signode += addnodes.desc_parameterlist()
         return fullname, prefix
 
     def _object_hierarchy_parts(self, sig_node: desc_signature) -> tuple[str, ...]:
@@ -144,7 +143,7 @@ class JSObject(ObjectDescription[tuple[str, str]]):
     def add_target_and_index(self, name_obj: tuple[str, str], sig: str,
                              signode: desc_signature) -> None:
         mod_name = self.env.ref_context.get('js:module')
-        fullname = (mod_name + '.' if mod_name else '') + name_obj[0]
+        fullname = (f'{mod_name}.' if mod_name else '') + name_obj[0]
         node_id = make_id(self.env, self.state.document, '', fullname)
         signode['ids'].append(node_id)
         self.state.document.note_explicit_target(signode)
@@ -153,8 +152,7 @@ class JSObject(ObjectDescription[tuple[str, str]]):
         domain.note_object(fullname, self.objtype, node_id, location=signode)
 
         if 'no-index-entry' not in self.options:
-            indextext = self.get_index_text(mod_name, name_obj)  # type: ignore[arg-type]
-            if indextext:
+            if indextext := self.get_index_text(mod_name, name_obj):
                 self.indexnode['entries'].append(('single', indextext, node_id, '', None))
 
     def get_index_text(self, objectname: str, name_obj: tuple[str, str]) -> str:
@@ -345,12 +343,12 @@ class JSXRefRole(XRefRole):
         if not has_explicit_title:
             title = title.lstrip('.')
             target = target.lstrip('~')
-            if title[0:1] == '~':
+            if title.startswith('~'):
                 title = title[1:]
                 dot = title.rfind('.')
                 if dot != -1:
                     title = title[dot + 1:]
-        if target[0:1] == '.':
+        if target.startswith('.'):
             target = target[1:]
             refnode['refspecific'] = True
         return title, target
@@ -435,13 +433,11 @@ class JavaScriptDomain(Domain):
         typ: str | None,
         searchorder: int = 0,
     ) -> tuple[str | None, tuple[str, str, str] | None]:
-        if name[-2:] == '()':
-            name = name[:-2]
-
+        name = name.removesuffix('()')
         searches = []
-        if mod_name and prefix:
-            searches.append('.'.join([mod_name, prefix, name]))
         if mod_name:
+            if prefix:
+                searches.append('.'.join([mod_name, prefix, name]))
             searches.append('.'.join([mod_name, name]))
         if prefix:
             searches.append('.'.join([prefix, name]))
@@ -478,8 +474,12 @@ class JavaScriptDomain(Domain):
         name, obj = self.find_obj(env, mod_name, prefix, target, None, 1)
         if not obj:
             return []
-        return [('js:' + self.role_for_objtype(obj[2]),  # type: ignore[operator]
-                 make_refnode(builder, fromdocname, obj[0], obj[1], contnode, name))]
+        return [
+            (
+                f'js:{self.role_for_objtype(obj[2])}',
+                make_refnode(builder, fromdocname, obj[0], obj[1], contnode, name),
+            )
+        ]
 
     def get_objects(self) -> Iterator[tuple[str, str, str, str, str, int]]:
         for refname, (docname, node_id, typ) in list(self.objects.items()):

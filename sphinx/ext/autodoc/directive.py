@@ -62,7 +62,7 @@ def process_documenter_options(documenter: type[Documenter], config: Config, opt
     for name in AUTODOC_DEFAULT_OPTIONS:
         if name not in documenter.option_spec:
             continue
-        negated = options.pop('no-' + name, True) is None
+        negated = options.pop(f'no-{name}', True) is None
         if name in config.autodoc_default_options and not negated:
             if name in options and isinstance(config.autodoc_default_options[name], str):
                 # take value from options if present or extend it
@@ -129,8 +129,10 @@ class AutodocDirective(SphinxDirective):
             documenter_options = process_documenter_options(doccls, self.config, self.options)
         except (KeyError, ValueError, TypeError) as exc:
             # an option is either unknown or has a wrong type
-            logger.error('An option to %s is either unknown or has an invalid value: %s' %
-                         (self.name, exc), location=(self.env.docname, lineno))
+            logger.error(
+                f'An option to {self.name} is either unknown or has an invalid value: {exc}',
+                location=(self.env.docname, lineno),
+            )
             return []
 
         # generate the output

@@ -92,8 +92,8 @@ class Builder:
         self.tags: Tags = app.tags
         self.tags.add(self.format)
         self.tags.add(self.name)
-        self.tags.add("format_%s" % self.format)
-        self.tags.add("builder_%s" % self.name)
+        self.tags.add(f"format_{self.format}")
+        self.tags.add(f"builder_{self.name}")
 
         # images that need to be copied over (source -> dest)
         self.images: dict[str, str] = {}
@@ -316,8 +316,7 @@ class Builder:
         logger.info(bold(__('looking for now-outdated files... ')), nonl=True)
         for docname in self.env.check_dependents(self.app, updated_docnames):
             updated_docnames.add(docname)
-        outdated = len(updated_docnames) - doccount
-        if outdated:
+        if outdated := len(updated_docnames) - doccount:
             logger.info(__('%d found'), outdated)
         else:
             logger.info(__('none found'))
@@ -326,17 +325,16 @@ class Builder:
             # save the environment
             from sphinx.application import ENV_PICKLE_FILENAME
             with progress_message(__('pickling environment')), \
-                    open(path.join(self.doctreedir, ENV_PICKLE_FILENAME), 'wb') as f:
+                        open(path.join(self.doctreedir, ENV_PICKLE_FILENAME), 'wb') as f:
                 pickle.dump(self.env, f, pickle.HIGHEST_PROTOCOL)
 
             # global actions
             self.app.phase = BuildPhase.CONSISTENCY_CHECK
             with progress_message(__('checking consistency')):
                 self.env.check_consistency()
-        else:
-            if method == 'update' and not docnames:
-                logger.info(bold(__('no targets are out of date.')))
-                return
+        elif method == 'update' and not docnames:
+            logger.info(bold(__('no targets are out of date.')))
+            return
 
         self.app.phase = BuildPhase.RESOLVING
 
@@ -420,8 +418,9 @@ class Builder:
             self._read_serial(docnames)
 
         if self.config.root_doc not in self.env.all_docs:
-            raise SphinxError('root file %s not found' %
-                              self.env.doc2path(self.config.root_doc))
+            raise SphinxError(
+                f'root file {self.env.doc2path(self.config.root_doc)} not found'
+            )
 
         for retval in self.events.emit('env-updated', self.env):
             if retval is not None:
@@ -522,7 +521,7 @@ class Builder:
         doctree.settings.env = None
         doctree.settings.record_dependencies = None  # type: ignore[assignment]
 
-        doctree_filename = path.join(self.doctreedir, docname + '.doctree')
+        doctree_filename = path.join(self.doctreedir, f'{docname}.doctree')
         ensuredir(path.dirname(doctree_filename))
         with open(doctree_filename, 'wb') as f:
             pickle.dump(doctree, f, pickle.HIGHEST_PROTOCOL)

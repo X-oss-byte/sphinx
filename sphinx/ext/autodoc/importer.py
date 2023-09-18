@@ -32,31 +32,24 @@ logger = logging.getLogger(__name__)
 
 def mangle(subject: Any, name: str) -> str:
     """Mangle the given name."""
-    try:
+    with contextlib.suppress(AttributeError):
         if isclass(subject) and name.startswith('__') and not name.endswith('__'):
             return f"_{subject.__name__}{name}"
-    except AttributeError:
-        pass
-
     return name
 
 
 def unmangle(subject: Any, name: str) -> str | None:
     """Unmangle the given name."""
-    try:
+    with contextlib.suppress(AttributeError):
         if isclass(subject) and not name.endswith('__'):
-            prefix = "_%s__" % subject.__name__
+            prefix = f"_{subject.__name__}__"
             if name.startswith(prefix):
                 return name.replace(prefix, "__", 1)
-            else:
-                for cls in subject.__mro__:
-                    prefix = "_%s__" % cls.__name__
-                    if name.startswith(prefix):
-                        # mangled attribute defined in parent class
-                        return None
-    except AttributeError:
-        pass
-
+            for cls in subject.__mro__:
+                prefix = f"_{cls.__name__}__"
+                if name.startswith(prefix):
+                    # mangled attribute defined in parent class
+                    return None
     return name
 
 
@@ -118,13 +111,12 @@ def import_object(modname: str, objpath: list[str], objtype: str = '',
             except ImportError as exc:
                 logger.debug('[autodoc] import %s => failed', modname)
                 exc_on_importing = exc
-                if '.' in modname:
-                    # retry with parent module
-                    modname, name = modname.rsplit('.', 1)
-                    objpath.insert(0, name)
-                else:
+                if '.' not in modname:
                     raise
 
+                # retry with parent module
+                modname, name = modname.rsplit('.', 1)
+                objpath.insert(0, name)
         obj = module
         parent = None
         object_name = None
@@ -205,16 +197,12 @@ def get_object_members(
                 members[name] = Attribute(name, True, value)
 
     # members in __slots__
-    try:
-        subject___slots__ = getslots(subject)
-        if subject___slots__:
+    with contextlib.suppress(TypeError, ValueError):
+        if subject___slots__ := getslots(subject):
             from sphinx.ext.autodoc import SLOTSATTR
 
             for name in subject___slots__:
                 members[name] = Attribute(name, True, SLOTSATTR)
-    except (TypeError, ValueError):
-        pass
-
     # other members
     for name in dir(subject):
         try:
@@ -266,17 +254,13 @@ def get_class_members(subject: Any, objpath: Any, attrgetter: Callable,
                 members[name] = ObjectMember(name, value, class_=subject)
 
     # members in __slots__
-    try:
-        subject___slots__ = getslots(subject)
-        if subject___slots__:
+    with contextlib.suppress(TypeError, ValueError):
+        if subject___slots__ := getslots(subject):
             from sphinx.ext.autodoc import SLOTSATTR
 
             for name, docstring in subject___slots__.items():
                 members[name] = ObjectMember(name, SLOTSATTR, class_=subject,
                                              docstring=docstring)
-    except (TypeError, ValueError):
-        pass
-
     # other members
     for name in dir(subject):
         try:
@@ -293,7 +277,7 @@ def get_class_members(subject: Any, objpath: Any, attrgetter: Callable,
         except AttributeError:
             continue
 
-    try:
+    with contextlib.suppress(AttributeError):
         for cls in getmro(subject):
             try:
                 modname = safe_getattr(cls, '__module__')
@@ -310,33 +294,33 @@ def get_class_members(subject: Any, objpath: Any, attrgetter: Callable,
             for name in getannotations(cls):
                 name = unmangle(cls, name)
                 if name and name not in members:
-                    if analyzer and (qualname, name) in analyzer.attr_docs:
-                        docstring = '\n'.join(analyzer.attr_docs[qualname, name])
-                    else:
-                        docstring = None
-
+                    docstring = (
+                        '\n'.join(analyzer.attr_docs[qualname, name])
+                        if analyzer and (qualname, name) in analyzer.attr_docs
+                        else None
+                    )
                     members[name] = ObjectMember(name, INSTANCEATTR, class_=cls,
                                                  docstring=docstring)
 
             # append or complete instance attributes (cf. self.attr1) if analyzer knows
             if analyzer:
                 for (ns, name), docstring in analyzer.attr_docs.items():
-                    if ns == qualname and name not in members:
-                        # otherwise unknown instance attribute
-                        members[name] = ObjectMember(name, INSTANCEATTR, class_=cls,
-                                                     docstring='\n'.join(docstring))
-                    elif (ns == qualname and docstring and
-                          isinstance(members[name], ObjectMember) and
-                          not members[name].docstring):
-                        if cls != subject and not inherit_docstrings:
-                            # If we are in the MRO of the class and not the class itself,
-                            # and we do not want to inherit docstrings, then skip setting
-                            # the docstring below
-                            continue
-                        # attribute is already known, because dir(subject) enumerates it.
-                        # But it has no docstring yet
-                        members[name].docstring = '\n'.join(docstring)
-    except AttributeError:
-        pass
-
+                    if ns == qualname:
+                        if name not in members:
+                            # otherwise unknown instance attribute
+                            members[name] = ObjectMember(name, INSTANCEATTR, class_=cls,
+                                                         docstring='\n'.join(docstring))
+                        elif (
+                            docstring
+                            and isinstance(members[name], ObjectMember)
+                            and not members[name].docstring
+                        ):
+                            if cls != subject and not inherit_docstrings:
+                                # If we are in the MRO of the class and not the class itself,
+                                # and we do not want to inherit docstrings, then skip setting
+                                # the docstring below
+                                continue
+                            # attribute is already known, because dir(subject) enumerates it.
+                            # But it has no docstring yet
+                            members[name].docstring = '\n'.join(docstring)
     return members

@@ -63,8 +63,8 @@ def handle_exception(
             print(red(__('reST markup error:')), file=stderr)
             print(terminal_safe(exception.args[0]), file=stderr)
         elif isinstance(exception, SphinxError):
-            print(red('%s:' % exception.category), file=stderr)
-            print(str(exception), file=stderr)
+            print(red(f'{exception.category}:'), file=stderr)
+            print(exception, file=stderr)
         elif isinstance(exception, UnicodeError):
             print(red(__('Encoding error:')), file=stderr)
             print(terminal_safe(str(exception)), file=stderr)
@@ -103,12 +103,11 @@ def jobs_argument(value: str) -> int:
     """
     if value == 'auto':
         return multiprocessing.cpu_count()
+    jobs = int(value)
+    if jobs <= 0:
+        raise argparse.ArgumentTypeError(__('job number should be a positive number'))
     else:
-        jobs = int(value)
-        if jobs <= 0:
-            raise argparse.ArgumentTypeError(__('job number should be a positive number'))
-        else:
-            return jobs
+        return jobs
 
 
 def get_parser() -> argparse.ArgumentParser:
@@ -272,7 +271,7 @@ def _parse_arguments(argv: Sequence[str]) -> argparse.Namespace:
         with contextlib.suppress(ValueError):
             val = int(val)
 
-        confoverrides['html_context.%s' % key] = val
+        confoverrides[f'html_context.{key}'] = val
 
     if args.nitpicky:
         confoverrides['nitpicky'] = True
@@ -335,10 +334,7 @@ def main(argv: Sequence[str] = (), /) -> int:
 
     if argv[:1] == ['--bug-report']:
         return _bug_report_info()
-    if argv[:1] == ['-M']:
-        return make_main(argv)
-    else:
-        return build_main(argv)
+    return make_main(argv) if argv[:1] == ['-M'] else build_main(argv)
 
 
 if __name__ == '__main__':

@@ -62,9 +62,9 @@ class TocTreeCollector(EnvironmentCollector):
         numentries = [0]  # nonlocal again...
 
         def build_toc(
-            node: Element | Sequence[Element],
-            depth: int = 1,
-        ) -> nodes.bullet_list | None:
+                node: Element | Sequence[Element],
+                depth: int = 1,
+            ) -> nodes.bullet_list | None:
             # list of table of contents entries
             entries: list[Element] = []
             # cache of parents -> list item
@@ -152,15 +152,10 @@ class TocTreeCollector(EnvironmentCollector):
 
                                 entries.append(entry)
 
-            if entries:
-                return nodes.bullet_list('', *entries)
-            return None
+            return nodes.bullet_list('', *entries) if entries else None
 
         toc = build_toc(doctree)
-        if toc:
-            app.env.tocs[docname] = toc
-        else:
-            app.env.tocs[docname] = nodes.bullet_list('')
+        app.env.tocs[docname] = toc if toc else nodes.bullet_list('')
         app.env.toc_num_entries[docname] = numentries[0]
 
     def get_updated_docs(self, app: Sphinx, env: BuildEnvironment) -> list[str]:
@@ -335,12 +330,7 @@ class TocTreeCollector(EnvironmentCollector):
 
 
 def _make_anchor_name(ids: list[str], num_entries: list[int]) -> str:
-    if not num_entries[0]:
-        # for the very first toc entry, don't add an anchor
-        # as it is the file's title anyway
-        anchorname = ''
-    else:
-        anchorname = '#' + ids[0]
+    anchorname = '' if not num_entries[0] else f'#{ids[0]}'
     num_entries[0] += 1
     return anchorname
 

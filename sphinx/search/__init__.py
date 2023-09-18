@@ -105,12 +105,10 @@ var Stemmer = function() {
         Return true if the target word should be registered in the search index.
         This method is called after stemming.
         """
-        return (
-            len(word) == 0 or not (
-                ((len(word) < 3) and (12353 < ord(word[0]) < 12436)) or
-                (ord(word[0]) < 256 and (
-                    word in self.stopwords
-                ))))
+        return not word or not (
+            ((len(word) < 3) and (12353 < ord(word[0]) < 12436))
+            or (ord(word[0]) < 256 and (word in self.stopwords))
+        )
 
 
 # SearchEnglish imported after SearchLanguage is defined due to circular import
@@ -187,11 +185,8 @@ def _is_meta_keywords(
 ) -> bool:
     if node.get('name') == 'keywords':
         meta_lang = node.get('lang')
-        if meta_lang is None:  # lang not specified
+        if meta_lang is None or meta_lang == lang:  # lang not specified
             return True
-        elif meta_lang == lang:  # matched to html_search_language
-            return True
-
     return False
 
 
@@ -299,7 +294,7 @@ class IndexBuilder:
         frozen = format.load(stream)
         # if an old index is present, we treat it as not existing.
         if not isinstance(frozen, dict) or \
-           frozen.get('envversion') != self.env.version:
+               frozen.get('envversion') != self.env.version:
             raise ValueError('old format')
         index2fn = frozen['docnames']
         self._filenames = dict(zip(index2fn, frozen['filenames']))
@@ -315,10 +310,7 @@ class IndexBuilder:
         def load_terms(mapping: dict[str, Any]) -> dict[str, set[str]]:
             rv = {}
             for k, v in mapping.items():
-                if isinstance(v, int):
-                    rv[k] = {index2fn[v]}
-                else:
-                    rv[k] = {index2fn[i] for i in v}
+                rv[k] = {index2fn[v]} if isinstance(v, int) else {index2fn[i] for i in v}
             return rv
 
         self._mapping = load_terms(frozen['terms'])
@@ -337,8 +329,7 @@ class IndexBuilder:
         otypes = self._objtypes
         onames = self._objnames
         for domainname, domain in sorted(self.env.domains.items()):
-            for fullname, dispname, type, docname, anchor, prio in \
-                    sorted(domain.get_objects()):
+            for fullname, dispname, type, docname, anchor, prio in sorted(domain.get_objects()):
                 if docname not in fn2index:
                     continue
                 if prio < 0:
@@ -352,8 +343,7 @@ class IndexBuilder:
                 except KeyError:
                     typeindex = len(otypes)
                     otypes[domainname, type] = typeindex
-                    otype = domain.object_types.get(type)
-                    if otype:
+                    if otype := domain.object_types.get(type):
                         # use str() to fire translation proxies
                         onames[typeindex] = (domainname, type,
                                              str(domain.get_type_name(otype)))
@@ -361,7 +351,7 @@ class IndexBuilder:
                         onames[typeindex] = (domainname, type, type)
                 if anchor == fullname:
                     shortanchor = ''
-                elif anchor == type + '-' + fullname:
+                elif anchor == f'{type}-{fullname}':
                     shortanchor = '-'
                 else:
                     shortanchor = anchor
@@ -388,7 +378,7 @@ class IndexBuilder:
         terms, title_terms = self.get_terms(fn2index)
 
         objects = self.get_objects(fn2index)  # populates _objtypes
-        objtypes = {v: k[0] + ':' + k[1] for (k, v) in self._objtypes.items()}
+        objtypes = {v: f'{k[0]}:{k[1]}' for (k, v) in self._objtypes.items()}
         objnames = self._objnames
 
         alltitles: dict[str, list[tuple[int, str]]] = {}
@@ -544,13 +534,12 @@ class IndexBuilder:
 
     def get_js_stemmer_code(self) -> str:
         """Returns JS code that will be inserted into language_data.js."""
-        if self.lang.js_stemmer_rawcode:
-            js_dir = path.join(package_dir, 'search', 'minified-js')
-            with open(path.join(js_dir, 'base-stemmer.js'), encoding='utf-8') as js_file:
-                base_js = js_file.read()
-            with open(path.join(js_dir, self.lang.js_stemmer_rawcode), encoding='utf-8') as js_file:
-                language_js = js_file.read()
-            return ('%s\n%s\nStemmer = %sStemmer;' %
-                    (base_js, language_js, self.lang.language_name))
-        else:
+        if not self.lang.js_stemmer_rawcode:
             return self.lang.js_stemmer_code
+        js_dir = path.join(package_dir, 'search', 'minified-js')
+        with open(path.join(js_dir, 'base-stemmer.js'), encoding='utf-8') as js_file:
+            base_js = js_file.read()
+        with open(path.join(js_dir, self.lang.js_stemmer_rawcode), encoding='utf-8') as js_file:
+            language_js = js_file.read()
+        return ('%s\n%s\nStemmer = %sStemmer;' %
+                (base_js, language_js, self.lang.language_name))

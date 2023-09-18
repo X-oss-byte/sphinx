@@ -168,10 +168,7 @@ class desc_signature(_desc_classes_injector, nodes.Part, nodes.Inline, nodes.Tex
 
     @property
     def child_text_separator(self):
-        if self.get('is_multiline'):
-            return ' '
-        else:
-            return super().child_text_separator
+        return ' ' if self.get('is_multiline') else super().child_text_separator
 
 
 class desc_signature_line(nodes.Part, nodes.Inline, nodes.FixedTextElement):
@@ -246,7 +243,7 @@ class desc_returns(desc_type):
     """Node for a "returns" annotation (a la -> in Python)."""
 
     def astext(self) -> str:
-        return ' -> ' + super().astext()
+        return f' -> {super().astext()}'
 
 
 class desc_parameterlist(nodes.Part, nodes.Inline, nodes.FixedTextElement):
@@ -288,7 +285,7 @@ class desc_optional(nodes.Part, nodes.Inline, nodes.FixedTextElement):
     child_text_separator = ', '
 
     def astext(self) -> str:
-        return '[' + super().astext() + ']'
+        return f'[{super().astext()}]'
 
 
 class desc_annotation(nodes.Part, nodes.Inline, nodes.FixedTextElement):

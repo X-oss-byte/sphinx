@@ -62,5 +62,8 @@ def _deprecation_warning(
     else:
         message = f'{qualified_name!r} is deprecated.'
 
-    warnings.warn(message + " Check CHANGES for Sphinx API modifications.",
-                  warning_class, stacklevel=3)
+    warnings.warn(
+        f"{message} Check CHANGES for Sphinx API modifications.",
+        warning_class,
+        stacklevel=3,
+    )

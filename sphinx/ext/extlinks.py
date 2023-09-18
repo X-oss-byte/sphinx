@@ -96,18 +96,16 @@ def make_link_role(name: str, base_url: str, caption: str) -> RoleFunction:
     # Remark: It is an implementation detail that we use Pythons %-formatting.
     # So far we only expose ``%s`` and require quoting of ``%`` using ``%%``.
     def role(typ: str, rawtext: str, text: str, lineno: int,
-             inliner: Inliner, options: dict | None = None, content: Sequence[str] = (),
-             ) -> tuple[list[Node], list[system_message]]:
+                 inliner: Inliner, options: dict | None = None, content: Sequence[str] = (),
+                 ) -> tuple[list[Node], list[system_message]]:
         text = utils.unescape(text)
         has_explicit_title, title, part = split_explicit_title(text)
         full_url = base_url % part
         if not has_explicit_title:
-            if caption is None:
-                title = full_url
-            else:
-                title = caption % part
+            title = full_url if caption is None else caption % part
         pnode = nodes.reference(title, title, internal=False, refuri=full_url)
         return [pnode], []
+
     return role
 
 

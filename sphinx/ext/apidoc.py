@@ -56,7 +56,7 @@ def is_initpy(filename: str) -> bool:
     """Check *filename* is __init__ file or not."""
     basename = path.basename(filename)
     return any(
-        basename == '__init__' + suffix
+        basename == f'__init__{suffix}'
         for suffix in sorted(PY_SUFFIXES, key=len, reverse=True)
     )
 
@@ -68,10 +68,10 @@ def module_join(*modnames: str | None) -> str:
 
 def is_packagedir(dirname: str | None = None, files: list[str] | None = None) -> bool:
     """Check given *files* contains __init__ file."""
-    if files is None and dirname is None:
-        return False
-
     if files is None:
+        if dirname is None:
+            return False
+
         files = os.listdir(dirname)
     return any(f for f in files if is_initpy(f))
 
@@ -170,7 +170,7 @@ def create_modules_toc_file(modules: list[str], opts: Any, name: str = 'modules'
     prev_module = ''
     for module in modules[:]:
         # look if the module is a subpackage and, if yes, ignore it
-        if module.startswith(prev_module + '.'):
+        if module.startswith(f'{prev_module}.'):
             modules.remove(module)
         else:
             prev_module = module
@@ -209,10 +209,9 @@ def is_skipped_module(filename: str, opts: Any, _excludes: Sequence[re.Pattern[s
     if not path.exists(filename):
         # skip if the file doesn't exist
         return True
-    if path.basename(filename).startswith('_') and not opts.includeprivate:
-        # skip if the module has a "private" name
-        return True
-    return False
+    return bool(
+        path.basename(filename).startswith('_') and not opts.includeprivate
+    )
 
 
 def walk(rootpath: str, excludes: Sequence[re.Pattern[str]], opts: Any,
@@ -229,11 +228,7 @@ def walk(rootpath: str, excludes: Sequence[re.Pattern[str]], opts: Any,
 
         # remove hidden ('.') and private ('_') directories, as well as
         # excluded dirs
-        if includeprivate:
-            exclude_prefixes: tuple[str, ...] = ('.',)
-        else:
-            exclude_prefixes = ('.', '_')
-
+        exclude_prefixes = ('.', ) if includeprivate else ('.', '_')
         subs[:] = sorted(sub for sub in subs if not sub.startswith(exclude_prefixes) and
                          not is_excluded(path.join(root, sub), excludes))
 
@@ -397,9 +392,13 @@ Note: By default this script will not overwrite already created files."""))
     group.add_argument('--extensions', metavar='EXTENSIONS', dest='extensions',
                        action='append', help=__('enable arbitrary extensions'))
     for ext in EXTENSIONS:
-        group.add_argument('--ext-%s' % ext, action='append_const',
-                           const='sphinx.ext.%s' % ext, dest='extensions',
-                           help=__('enable %s extension') % ext)
+        group.add_argument(
+            f'--ext-{ext}',
+            action='append_const',
+            const=f'sphinx.ext.{ext}',
+            dest='extensions',
+            help=__('enable %s extension') % ext,
+        )
 
     group = parser.add_argument_group(__('Project templating'))
     group.add_argument('-t', '--templatedir', metavar='TEMPLATEDIR',
@@ -442,7 +441,7 @@ def main(argv: Sequence[str] = (), /) -> int:
         prev_module = ''
         text = ''
         for module in modules:
-            if module.startswith(prev_module + '.'):
+            if module.startswith(f'{prev_module}.'):
                 continue
             prev_module = module
             text += '   %s\n' % module
@@ -454,11 +453,14 @@ def main(argv: Sequence[str] = (), /) -> int:
             'author': args.author or 'Author',
             'version': args.version or '',
             'release': args.release or args.version or '',
-            'suffix': '.' + args.suffix,
+            'suffix': f'.{args.suffix}',
             'master': 'index',
             'epub': True,
-            'extensions': ['sphinx.ext.autodoc', 'sphinx.ext.viewcode',
-                           'sphinx.ext.todo'],
+            'extensions': [
+                'sphinx.ext.autodoc',
+                'sphinx.ext.viewcode',
+                'sphinx.ext.todo',
+            ],
             'makefile': True,
             'batchfile': True,
             'make_mode': True,

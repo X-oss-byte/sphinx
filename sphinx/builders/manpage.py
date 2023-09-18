@@ -67,18 +67,14 @@ class ManualPageBuilder(Builder):
                                   'document %s'), docname)
                 continue
             if isinstance(authors, str):
-                if authors:
-                    authors = [authors]
-                else:
-                    authors = []
-
+                authors = [authors] if authors else []
             docsettings.title = name
             docsettings.subtitle = description
             docsettings.authors = authors
             docsettings.section = section
 
             if self.config.man_make_section_directory:
-                dirname = 'man%s' % section
+                dirname = f'man{section}'
                 ensuredir(path.join(self.outdir, dirname))
                 targetname = f'{dirname}/{name}.{section}'
             else:

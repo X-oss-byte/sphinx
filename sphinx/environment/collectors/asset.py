@@ -55,7 +55,7 @@ class ImageCollector(EnvironmentCollector):
                 candidates['?'] = imguri
                 continue
 
-            if imguri.endswith(os.extsep + '*'):
+            if imguri.endswith(f'{os.extsep}*'):
                 # Update `node['uri']` to a relative path from srcdir
                 # from a relative path from current document.
                 rel_imgpath, full_imgpath = app.env.relfn2path(imguri, docname)
@@ -100,7 +100,7 @@ class ImageCollector(EnvironmentCollector):
                 mimetype = guess_mimetype(filename)
                 if mimetype is None:
                     basename, suffix = path.splitext(filename)
-                    mimetype = 'image/x-' + suffix[1:]
+                    mimetype = f'image/x-{suffix[1:]}'
                 if mimetype not in candidates:
                     globbed.setdefault(mimetype, []).append(new_imgpath)
             except OSError as err:

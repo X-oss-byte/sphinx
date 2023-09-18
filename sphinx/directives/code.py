@@ -79,7 +79,7 @@ def container_wrapper(
     directive.state.nested_parse(StringList([caption], source=''),
                                  directive.content_offset, parsed)
     if isinstance(parsed[0], nodes.system_message):
-        msg = __('Invalid caption: %s' % parsed[0].astext())
+        msg = __(f'Invalid caption: {parsed[0].astext()}')
         raise ValueError(msg)
     if isinstance(parsed[0], nodes.Element):
         caption_node = nodes.caption(parsed[0].rawsource, '',
@@ -118,8 +118,7 @@ class CodeBlock(SphinxDirective):
         code = '\n'.join(self.content)
         location = self.state_machine.get_source_and_line(self.lineno)
 
-        linespec = self.options.get('emphasize-lines')
-        if linespec:
+        if linespec := self.options.get('emphasize-lines'):
             try:
                 nlines = len(self.content)
                 hl_lines = parselinenos(linespec, nlines)
@@ -161,8 +160,7 @@ class CodeBlock(SphinxDirective):
             extra_args['linenostart'] = self.options['lineno-start']
         self.set_source_info(literal)
 
-        caption = self.options.get('caption')
-        if caption:
+        if caption := self.options.get('caption'):
             try:
                 literal = container_wrapper(self, literal, caption)
             except ValueError as exc:
@@ -251,8 +249,7 @@ class LiteralIncludeReader:
     def pyobject_filter(
         self, lines: list[str], location: tuple[str, int] | None = None,
     ) -> list[str]:
-        pyobject = self.options.get('pyobject')
-        if pyobject:
+        if pyobject := self.options.get('pyobject'):
             from sphinx.pycode import ModuleAnalyzer
             analyzer = ModuleAnalyzer.for_file(self.filename, '')
             tags = analyzer.find_tags()
@@ -270,8 +267,7 @@ class LiteralIncludeReader:
     def lines_filter(
         self, lines: list[str], location: tuple[str, int] | None = None,
     ) -> list[str]:
-        linespec = self.options.get('lines')
-        if linespec:
+        if linespec := self.options.get('lines'):
             linelist = parselinenos(linespec, len(lines))
             if any(i >= len(lines) for i in linelist):
                 logger.warning(__('line number spec is out of range(1-%d): %r') %
@@ -287,7 +283,7 @@ class LiteralIncludeReader:
                                         'set of "lines"'))
 
             lines = [lines[n] for n in linelist if n < len(lines)]
-            if lines == []:
+            if not lines:
                 raise ValueError(__('Line spec %r: no lines pulled from include file %r') %
                                  (linespec, self.filename))
 
@@ -320,9 +316,9 @@ class LiteralIncludeReader:
                         return lines[lineno:]
 
             if inclusive is True:
-                raise ValueError('start-after pattern not found: %s' % start)
+                raise ValueError(f'start-after pattern not found: {start}')
             else:
-                raise ValueError('start-at pattern not found: %s' % start)
+                raise ValueError(f'start-at pattern not found: {start}')
 
         return lines
 
@@ -343,23 +339,19 @@ class LiteralIncludeReader:
                 if end in line:
                     if inclusive:
                         return lines[:lineno + 1]
-                    else:
-                        if lineno == 0:
-                            pass  # end-before ignores first line
-                        else:
-                            return lines[:lineno]
+                    if lineno != 0:
+                        return lines[:lineno]
             if inclusive is True:
-                raise ValueError('end-at pattern not found: %s' % end)
+                raise ValueError(f'end-at pattern not found: {end}')
             else:
-                raise ValueError('end-before pattern not found: %s' % end)
+                raise ValueError(f'end-before pattern not found: {end}')
 
         return lines
 
     def prepend_filter(
         self, lines: list[str], location: tuple[str, int] | None = None,
     ) -> list[str]:
-        prepend = self.options.get('prepend')
-        if prepend:
+        if prepend := self.options.get('prepend'):
             lines.insert(0, prepend + '\n')
 
         return lines
@@ -367,8 +359,7 @@ class LiteralIncludeReader:
     def append_filter(
         self, lines: list[str], location: tuple[str, int] | None = None,
     ) -> list[str]:
-        append = self.options.get('append')
-        if append:
+        if append := self.options.get('append'):
             lines.append(append + '\n')
 
         return lines

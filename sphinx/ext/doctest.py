@@ -291,7 +291,7 @@ class DocTestBuilder(Builder):
         # that code nevertheless, we monkey-patch the "compile" it uses.
         doctest.compile = self.compile  # type: ignore[attr-defined]
 
-        sys.path[0:0] = self.config.doctest_path
+        sys.path[:0] = self.config.doctest_path
 
         self.type = 'single'
 
@@ -380,23 +380,19 @@ Doctest summary
             # `docutils.nodes.Node.setup_child`, but Sphinx should report
             # relative to the file, not the docstring.
             return None  # type: ignore[return-value]
-        if node.line is not None:
-            # TODO: find the root cause of this off by one error.
-            return node.line - 1
-        return None
+        return node.line - 1 if node.line is not None else None
 
     def skipped(self, node: Element) -> bool:
         if 'skipif' not in node:
             return False
-        else:
-            condition = node['skipif']
-            context: dict[str, Any] = {}
-            if self.config.doctest_global_setup:
-                exec(self.config.doctest_global_setup, context)  # NoQA: S102
-            should_skip = eval(condition, context)  # NoQA: PGH001
-            if self.config.doctest_global_cleanup:
-                exec(self.config.doctest_global_cleanup, context)  # NoQA: S102
-            return should_skip
+        condition = node['skipif']
+        context: dict[str, Any] = {}
+        if self.config.doctest_global_setup:
+            exec(self.config.doctest_global_setup, context)  # NoQA: S102
+        should_skip = eval(condition, context)  # NoQA: PGH001
+        if self.config.doctest_global_cleanup:
+            exec(self.config.doctest_global_cleanup, context)  # NoQA: S102
+        return should_skip
 
     def test_doc(self, docname: str, doctree: Node) -> None:
         groups: dict[str, TestGroup] = {}
@@ -501,9 +497,7 @@ Doctest summary
             old_f = runner.failures
             self.type = 'exec'  # the snippet may contain multiple statements
             runner.run(sim_doctest, out=self._warn_out, clear_globs=False)
-            if runner.failures > old_f:
-                return False
-            return True
+            return runner.failures <= old_f
 
         # run the setup code
         if not run_setup_cleanup(self.setup_runner, group.setup, 'setup'):
@@ -537,10 +531,7 @@ Doctest summary
                 options[doctest.DONT_ACCEPT_BLANKLINE] = True
                 # find out if we're testing an exception
                 m = parser._EXCEPTION_RE.match(output)  # type: ignore[attr-defined]
-                if m:
-                    exc_msg = m.group('msg')
-                else:
-                    exc_msg = None
+                exc_msg = m.group('msg') if m else None
                 example = doctest.Example(code[0].code, output, exc_msg=exc_msg,
                                           lineno=code[0].lineno, options=options)
                 test = doctest.DocTest([example], {}, group.name,

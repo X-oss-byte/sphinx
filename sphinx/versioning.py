@@ -155,7 +155,7 @@ class UIDTransform(SphinxTransform):
         if env.versioning_compare:
             # get old doctree
             try:
-                filename = path.join(env.doctreedir, env.docname + '.doctree')
+                filename = path.join(env.doctreedir, f'{env.docname}.doctree')
                 with open(filename, 'rb') as f:
                     old_doctree = pickle.load(f)
             except OSError:

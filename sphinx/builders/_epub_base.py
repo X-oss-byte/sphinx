@@ -228,8 +228,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
                                                    self, prune_toctrees=False,
                                                    includehidden=True)
         self.refnodes = self.get_refnodes(doctree, [])
-        master_dir = path.dirname(self.config.root_doc)
-        if master_dir:
+        if master_dir := path.dirname(self.config.root_doc):
             master_dir += '/'  # XXX or os.sep?
             for item in self.refnodes:
                 item['refuri'] = master_dir + item['refuri']
@@ -250,12 +249,14 @@ class EpubBuilder(StandaloneHTMLBuilder):
                 'refuri': html.escape(file),
                 'text': ssp(html.escape(text)),
             })
-        for file, text in self.config.epub_post_files:
-            refnodes.append({
+        refnodes.extend(
+            {
                 'level': 1,
                 'refuri': html.escape(file),
                 'text': ssp(html.escape(text)),
-            })
+            }
+            for file, text in self.config.epub_post_files
+        )
 
     def fix_fragment(self, prefix: str, fragment: str) -> str:
         """Return a href/id attribute with colons replaced by hyphens."""
@@ -378,14 +379,12 @@ class EpubBuilder(StandaloneHTMLBuilder):
         for _key, columns in tree:
             for _entryname, (links, subitems, _key) in columns:
                 for (i, (ismain, link)) in enumerate(links):
-                    m = self.refuri_re.match(link)
-                    if m:
+                    if m := self.refuri_re.match(link):
                         links[i] = (ismain,
                                     self.fix_fragment(m.group(1), m.group(2)))
                 for _subentryname, subentrylinks in subitems:
                     for (i, (ismain, link)) in enumerate(subentrylinks):
-                        m = self.refuri_re.match(link)
-                        if m:
+                        if m := self.refuri_re.match(link):
                             subentrylinks[i] = (ismain,
                                                 self.fix_fragment(m.group(1), m.group(2)))
 
@@ -439,11 +438,11 @@ class EpubBuilder(StandaloneHTMLBuilder):
         """
         if self.images:
             if self.config.epub_fix_images or self.config.epub_max_image_width:
-                if not Image:
+                if Image:
+                    self.copy_image_files_pil()
+                else:
                     logger.warning(__('Pillow not found - copying image files'))
                     super().copy_image_files()
-                else:
-                    self.copy_image_files_pil()
             else:
                 super().copy_image_files()
 
@@ -486,8 +485,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
         else:
             time_tuple = time.gmtime()
 
-        metadata: dict[str, Any] = {}
-        metadata['title'] = html.escape(self.config.epub_title)
+        metadata: dict[str, Any] = {'title': html.escape(self.config.epub_title)}
         metadata['author'] = html.escape(self.config.epub_author)
         metadata['uid'] = html.escape(self.config.epub_uid)
         metadata['lang'] = html.escape(self.config.epub_language)
@@ -510,13 +508,20 @@ class EpubBuilder(StandaloneHTMLBuilder):
 
         # files
         self.files: list[str] = []
-        self.ignored_files = ['.buildinfo', 'mimetype', 'content.opf',
-                              'toc.ncx', 'META-INF/container.xml',
-                              'Thumbs.db', 'ehthumbs.db', '.DS_Store',
-                              'nav.xhtml', self.config.epub_basename + '.epub'] + \
-            self.config.epub_exclude_files
+        self.ignored_files = [
+            '.buildinfo',
+            'mimetype',
+            'content.opf',
+            'toc.ncx',
+            'META-INF/container.xml',
+            'Thumbs.db',
+            'ehthumbs.db',
+            '.DS_Store',
+            'nav.xhtml',
+            f'{self.config.epub_basename}.epub',
+        ] + self.config.epub_exclude_files
         if not self.use_index:
-            self.ignored_files.append('genindex' + self.out_suffix)
+            self.ignored_files.append(f'genindex{self.out_suffix}')
         for root, dirs, files in os.walk(self.outdir):
             dirs.sort()
             for fn in sorted(files):
@@ -553,9 +558,9 @@ class EpubBuilder(StandaloneHTMLBuilder):
             metadata['spines'].append(spine)
             spinefiles.add(info[0] + self.out_suffix)
         if self.use_index:
-            spine = Spine(html.escape(self.make_id('genindex' + self.out_suffix)), True)
+            spine = Spine(html.escape(self.make_id(f'genindex{self.out_suffix}')), True)
             metadata['spines'].append(spine)
-            spinefiles.add('genindex' + self.out_suffix)
+            spinefiles.add(f'genindex{self.out_suffix}')
         # add auto generated files
         for name in self.files:
             if name not in spinefiles and name.endswith(self.out_suffix):
@@ -592,7 +597,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
                     self.files.append(file)
                 if type == 'cover':
                     auto_add_cover = False
-                if type == 'toc':
+                elif type == 'toc':
                     auto_add_toc = False
                 metadata['guides'].append(Guide(html.escape(type),
                                                 html.escape(title),
@@ -624,8 +629,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
         Subelements of a node are nested inside the navpoint.  For nested nodes
         the parent node is reinserted in the subnav.
         """
-        navstack: list[NavPoint] = []
-        navstack.append(NavPoint('dummy', 0, '', '', []))
+        navstack: list[NavPoint] = [NavPoint('dummy', 0, '', '', [])]
         level = 0
         lastnode = None
         for node in nodes:
@@ -666,10 +670,11 @@ class EpubBuilder(StandaloneHTMLBuilder):
         """Create a dictionary with all metadata for the toc.ncx file
         properly escaped.
         """
-        metadata: dict[str, Any] = {}
-        metadata['uid'] = self.config.epub_uid
-        metadata['title'] = html.escape(self.config.epub_title)
-        metadata['level'] = level
+        metadata: dict[str, Any] = {
+            'uid': self.config.epub_uid,
+            'title': html.escape(self.config.epub_title),
+            'level': level,
+        }
         metadata['navpoints'] = navpoints
         return metadata
 
@@ -699,7 +704,7 @@ class EpubBuilder(StandaloneHTMLBuilder):
         It is a zip file with the mimetype file stored uncompressed as the first
         entry.
         """
-        outname = self.config.epub_basename + '.epub'
+        outname = f'{self.config.epub_basename}.epub'
         logger.info(__('writing %s file...'), outname)
         epub_filename = path.join(self.outdir, outname)
         with ZipFile(epub_filename, 'w', ZIP_DEFLATED) as epub:

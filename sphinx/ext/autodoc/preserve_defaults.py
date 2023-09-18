@@ -162,17 +162,12 @@ def update_defvalue(app: Sphinx, obj: Any, bound_method: bool) -> None:
             else:
                 if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD):
                     default = defaults.pop(0)
-                    value = get_default_value(lines, default)
-                    if value is None:
-                        value = ast_unparse(default)
-                    parameters[i] = param.replace(default=DefaultValue(value))
                 else:
                     default = kw_defaults.pop(0)  # type: ignore[assignment]
-                    value = get_default_value(lines, default)
-                    if value is None:
-                        value = ast_unparse(default)
-                    parameters[i] = param.replace(default=DefaultValue(value))
-
+                value = get_default_value(lines, default)
+                if value is None:
+                    value = ast_unparse(default)
+                parameters[i] = param.replace(default=DefaultValue(value))
         sig = sig.replace(parameters=parameters)
         try:
             obj.__signature__ = sig

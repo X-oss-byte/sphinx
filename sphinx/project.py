@@ -60,7 +60,7 @@ class Project:
         ):
             if docname := self.path2doc(filename):
                 if docname in self.docnames:
-                    pattern = os.path.join(self.srcdir, docname) + '.*'
+                    pattern = f'{os.path.join(self.srcdir, docname)}.*'
                     files = [relpath(f, self.srcdir) for f in glob(pattern)]
                     logger.warning(__('multiple files found for the document "%s": %r\n'
                                       'Use %r for the build.'),
@@ -88,12 +88,14 @@ class Project:
                 with contextlib.suppress(ValueError):
                     filename = os.path.relpath(filename, self.srcdir)
 
-            for suffix in self.source_suffix:
-                if os.path.basename(filename).endswith(suffix):
-                    return path_stabilize(filename).removesuffix(suffix)
-
-            # the file does not have a docname
-            return None
+            return next(
+                (
+                    path_stabilize(filename).removesuffix(suffix)
+                    for suffix in self.source_suffix
+                    if os.path.basename(filename).endswith(suffix)
+                ),
+                None,
+            )
 
     def doc2path(self, docname: str, absolute: bool) -> str:
         """Return the filename for the document name.
@@ -107,6 +109,4 @@ class Project:
             # Backwards compatibility: the document does not exist
             filename = docname + self._first_source_suffix
 
-        if absolute:
-            return os.path.join(self.srcdir, filename)
-        return filename
+        return os.path.join(self.srcdir, filename) if absolute else filename

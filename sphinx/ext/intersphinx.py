@@ -161,14 +161,13 @@ def _get_safe_url(url: str) -> str:
     parts = urlsplit(url)
     if parts.username is None:
         return url
-    else:
-        frags = list(parts)
-        if parts.port:
-            frags[1] = f'{parts.username}@{parts.hostname}:{parts.port}'
-        else:
-            frags[1] = f'{parts.username}@{parts.hostname}'
-
-        return urlunsplit(frags)
+    frags = list(parts)
+    frags[1] = (
+        f'{parts.username}@{parts.hostname}:{parts.port}'
+        if parts.port
+        else f'{parts.username}@{parts.hostname}'
+    )
+    return urlunsplit(frags)
 
 
 def fetch_inventory(app: Sphinx, uri: str, inv: str) -> Inventory:
@@ -193,7 +192,7 @@ def fetch_inventory(app: Sphinx, uri: str, inv: str) -> Inventory:
             if inv != newinv:
                 logger.info(__('intersphinx inventory has moved: %s -> %s'), inv, newinv)
 
-                if uri in (inv, path.dirname(inv), path.dirname(inv) + '/'):
+                if uri in (inv, path.dirname(inv), f'{path.dirname(inv)}/'):
                     uri = path.dirname(newinv)
         with f:
             try:
@@ -237,7 +236,7 @@ def fetch_inventory_group(
                     return True
         return False
     finally:
-        if failures == []:
+        if not failures:
             pass
         elif len(failures) < len(invs):
             logger.info(__("encountered some issues with some of the inventories,"
@@ -257,14 +256,21 @@ def load_mappings(app: Sphinx) -> None:
     intersphinx_cache: dict[str, InventoryCacheEntry] = inventories.cache
 
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        futures = []
         name: str | None
         uri: str
         invs: tuple[str | None, ...]
-        for name, (uri, invs) in app.config.intersphinx_mapping.values():
-            futures.append(pool.submit(
-                fetch_inventory_group, name, uri, invs, intersphinx_cache, app, now,
-            ))
+        futures = [
+            pool.submit(
+                fetch_inventory_group,
+                name,
+                uri,
+                invs,
+                intersphinx_cache,
+                app,
+                now,
+            )
+            for name, (uri, invs) in app.config.intersphinx_mapping.values()
+        ]
         updated = [f.result() for f in concurrent.futures.as_completed(futures)]
 
     if any(updated):
@@ -310,7 +316,7 @@ def _create_element_from_result(domain: Domain, inv_name: str | None,
             (domain.name == 'std' and node['reftype'] == 'keyword'):
         # use whatever title was given, but strip prefix
         title = contnode.astext()
-        if inv_name is not None and title.startswith(inv_name + ':'):
+        if inv_name is not None and title.startswith(f'{inv_name}:'):
             newnode.append(contnode.__class__(title[len(inv_name) + 1:],
                                               title[len(inv_name) + 1:]))
         else:
@@ -337,9 +343,12 @@ def _resolve_reference_in_domain_by_target(
         elif objtype == 'std:term':
             # Check for potential case insensitive matches for terms only
             target_lower = target.lower()
-            insensitive_matches = list(filter(lambda k: k.lower() == target_lower,
-                                              inventory[objtype].keys()))
-            if insensitive_matches:
+            if insensitive_matches := list(
+                filter(
+                    lambda k: k.lower() == target_lower,
+                    inventory[objtype].keys(),
+                )
+            ):
                 data = inventory[objtype][insensitive_matches[0]]
             else:
                 # No case insensitive match either, continue to the next candidate
@@ -408,8 +417,11 @@ def _resolve_reference(env: BuildEnvironment, inv_name: str | None, inventory: I
     typ = node['reftype']
     if typ == 'any':
         for domain_name, domain in env.domains.items():
-            if (honor_disabled_refs
-                    and (domain_name + ":*") in env.config.intersphinx_disabled_reftypes):
+            if (
+                honor_disabled_refs
+                and f"{domain_name}:*"
+                in env.config.intersphinx_disabled_reftypes
+            ):
                 continue
             objtypes: Iterable[str] = domain.object_types.keys()
             res = _resolve_reference_in_domain(env, inv_name, inventory,
@@ -424,17 +436,19 @@ def _resolve_reference(env: BuildEnvironment, inv_name: str | None, inventory: I
         if not domain_name:
             # only objects in domains are in the inventory
             return None
-        if honor_disabled_refs \
-                and (domain_name + ":*") in env.config.intersphinx_disabled_reftypes:
+        if (
+            honor_disabled_refs
+            and f"{domain_name}:*" in env.config.intersphinx_disabled_reftypes
+        ):
             return None
         domain = env.get_domain(domain_name)
-        objtypes = domain.objtypes_for_role(typ) or ()
-        if not objtypes:
+        if objtypes := domain.objtypes_for_role(typ) or ():
+            return _resolve_reference_in_domain(env, inv_name, inventory,
+                                                honor_disabled_refs,
+                                                domain, objtypes,
+                                                node, contnode)
+        else:
             return None
-        return _resolve_reference_in_domain(env, inv_name, inventory,
-                                            honor_disabled_refs,
-                                            domain, objtypes,
-                                            node, contnode)
 
 
 def inventory_exists(env: BuildEnvironment, inv_name: str) -> bool:
@@ -598,8 +612,7 @@ class IntersphinxRole(SphinxRole):
             return False
 
     def invoke_role(self, role: tuple[str, str]) -> tuple[list[Node], list[system_message]]:
-        domain = self.env.get_domain(role[0])
-        if domain:
+        if domain := self.env.get_domain(role[0]):
             role_func = domain.role(role[1])
             assert role_func is not None
 
@@ -700,7 +713,7 @@ def setup(app: Sphinx) -> dict[str, Any]:
 
 def inspect_main(argv: list[str], /) -> int:
     """Debug functionality to print out an inventory"""
-    if len(argv) < 1:
+    if not argv:
         print("Print out an inventory file.\n"
               "Error: must specify local path or URL to an inventory file.",
               file=sys.stderr)

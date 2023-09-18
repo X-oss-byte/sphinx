@@ -117,11 +117,7 @@ class Theme:
         if overrides is None:
             overrides = {}
 
-        if self.base:
-            options = self.base.get_options()
-        else:
-            options = {}
-
+        options = self.base.get_options() if self.base else {}
         with contextlib.suppress(configparser.NoSectionError):
             options.update(self.config.items('options'))
 
@@ -195,13 +191,11 @@ class HTMLThemeFactory:
         """
         # look up for new styled entry_points at first
         theme_entry_points = entry_points(group='sphinx.html_themes')
-        try:
+        with contextlib.suppress(KeyError):
             entry_point = theme_entry_points[name]
             self.app.registry.load_extension(self.app, entry_point.module)
             self.app.config.post_init_values()
             return
-        except KeyError:
-            pass
 
     def find_themes(self, theme_path: str) -> dict[str, str]:
         """Search themes from specified directory."""
@@ -213,14 +207,12 @@ class HTMLThemeFactory:
             pathname = path.join(theme_path, entry)
             if path.isfile(pathname) and entry.lower().endswith('.zip'):
                 if is_archived_theme(pathname):
-                    name = entry[:-4]
-                    themes[name] = pathname
+                    themes[entry[:-4]] = pathname
                 else:
                     logger.warning(__('file %r on theme path is not a valid '
                                       'zipfile or contains no theme'), entry)
-            else:
-                if path.isfile(path.join(pathname, THEMECONF)):
-                    themes[entry] = pathname
+            elif path.isfile(path.join(pathname, THEMECONF)):
+                themes[entry] = pathname
 
         return themes
 

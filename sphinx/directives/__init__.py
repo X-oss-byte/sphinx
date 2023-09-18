@@ -33,12 +33,10 @@ def optional_int(argument: str) -> int | None:
     """
     if argument is None:
         return None
-    else:
-        value = int(argument)
-        if value < 0:
-            msg = 'negative value; must be positive or zero'
-            raise ValueError(msg)
-        return value
+    value = int(argument)
+    if value < 0:
+        raise ValueError('negative value; must be positive or zero')
+    return value
 
 
 ObjDescT = TypeVar('ObjDescT')
@@ -326,8 +324,11 @@ class DefaultRole(SphinxDirective):
         else:
             literal_block = nodes.literal_block(self.block_text, self.block_text)
             reporter = self.state.reporter
-            error = reporter.error('Unknown interpreted text role "%s".' % role_name,
-                                   literal_block, line=self.lineno)
+            error = reporter.error(
+                f'Unknown interpreted text role "{role_name}".',
+                literal_block,
+                line=self.lineno,
+            )
             messages += [error]
 
         return cast(list[nodes.Node], messages)

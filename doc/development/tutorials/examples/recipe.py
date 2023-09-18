@@ -124,11 +124,11 @@ class RecipeDomain(Domain):
 
     def resolve_xref(self, env, fromdocname, builder, typ, target, node,
                      contnode):
-        match = [(docname, anchor)
-                 for name, sig, typ, docname, anchor, prio
-                 in self.get_objects() if sig == target]
-
-        if len(match) > 0:
+        if match := [
+            (docname, anchor)
+            for name, sig, typ, docname, anchor, prio in self.get_objects()
+            if sig == target
+        ]:
             todocname = match[0][0]
             targ = match[0][1]
 
